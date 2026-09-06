@@ -1,6 +1,20 @@
-import { addDoc, collection, getDocs, limit, query, where } from "firebase/firestore";
-import { db } from "./firebase";
+import {
+  addDoc,
+  collection,
+  getDocs,
+  getFirestore,
+  limit,
+  query,
+  where,
+} from "firebase/firestore";
+import { app } from "./firebase";
 import type { CommentRow } from "./types";
+
+// getFirestore (and the ~500KB firebase/firestore module behind it) only
+// runs once this module is actually reached — app.ts dynamically import()s
+// this file rather than importing it at the top level, so pages that never
+// open a comment thread don't pay for it.
+const db = app ? getFirestore(app) : null;
 
 // A Firestore query that combines an equality filter with `orderBy` on a
 // different field needs a manually-created composite index (confirmed
@@ -50,6 +64,7 @@ export async function fetchThread(mangaId: string, chapterId: string | null): Pr
 export async function postComment(row: {
   manga_id: string;
   chapter_id: string | null;
+  uid: string;
   name: string;
   rating: number;
   body: string;
@@ -60,10 +75,19 @@ export async function postComment(row: {
     thread_id: threadId(row.manga_id, row.chapter_id),
     manga_id: row.manga_id,
     chapter_id: row.chapter_id,
+    uid: row.uid,
     name: row.name,
     rating: row.rating,
     body: row.body,
     created_at: now,
   });
-  return { id: docRef.id, ...row, created_at: now.toISOString() };
+  return {
+    id: docRef.id,
+    manga_id: row.manga_id,
+    chapter_id: row.chapter_id,
+    name: row.name,
+    rating: row.rating,
+    body: row.body,
+    created_at: now.toISOString(),
+  };
 }

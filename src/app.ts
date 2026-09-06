@@ -1,4 +1,5 @@
-import { commentsConfigured } from "./commentsConfig";
+import { logOut, onAuthChange, signIn, signUp } from "./auth";
+import { firebaseConfigured } from "./firebaseConfig";
 import {
   fetchChapterPages,
   fetchChapters,
@@ -20,6 +21,7 @@ import type {
   ReadingProgressEntry,
   SortMode,
 } from "./types";
+import type { User } from "firebase/auth";
 
 // The markup in index.html is static and every id referenced here is
 // guaranteed to exist, so `$` is typed to return a non-null HTMLElement
@@ -35,7 +37,8 @@ const SEED_FOLLOWED_ID = "32d76d19-8a05-4db0-9fc2-e0b0648fe9d0";
 let filters: Filters = { type: "All", genre: "All", status: "All" };
 let currentComic = "";
 let currentChapterId: string | null = null;
-let loggedIn = false;
+let currentUser: User | null = null;
+let authMode: "signin" | "signup" = "signin";
 const followed = new Set<string>([SEED_FOLLOWED_ID]);
 let sortMode: SortMode = "latest";
 let explorePage = 1;
@@ -540,30 +543,77 @@ function toggleFollow(): void {
   $("followBtn").textContent = followed.has(currentComic) ? "Following" : "Follow";
 }
 
+function setAuthMode(mode: "signin" | "signup"): void {
+  authMode = mode;
+  const nameField = $("authName") as HTMLInputElement;
+  nameField.hidden = mode === "signin";
+  nameField.required = mode === "signup";
+  $("authEyebrow").textContent = mode === "signin" ? "Login" : "Create account";
+  $("authHeading").textContent = mode === "signin" ? "Welcome back." : "Join KomikVibe.";
+  $("authSubmitBtn").textContent = mode === "signin" ? "Sign in" : "Create account";
+  $("authSwitchPrompt").textContent = mode === "signin" ? "No account yet?" : "Already have an account?";
+  $("authSwitchLink").textContent = mode === "signin" ? "Create one" : "Sign in";
+}
+function toggleAuthMode(): void {
+  setAuthMode(authMode === "signin" ? "signup" : "signin");
+  $("authError").hidden = true;
+}
 function openLogin(): void {
   closeMobileMenu();
+  if (!firebaseConfigured) {
+    toast("Login isn't set up yet.");
+    return;
+  }
+  setAuthMode("signin");
+  $("authError").hidden = true;
+  ($("authForm") as HTMLFormElement).reset();
   $("loginModal").classList.add("open");
 }
 function closeLogin(): void {
   $("loginModal").classList.remove("open");
 }
-function demoLogin(provider: string): void {
-  loggedIn = true;
-  localStorage.setItem("panpan-demo-login", "1");
-  closeLogin();
-  $("loginBtn").textContent = "Logout";
-  $("loginBtn").onclick = logout;
-  toast("Logged in as Irfan Demo via " + provider);
+async function submitAuth(e: Event): Promise<void> {
+  e.preventDefault();
+  const errorBox = $("authError");
+  errorBox.hidden = true;
+  const email = ($("authEmail") as HTMLInputElement).value.trim();
+  const password = ($("authPassword") as HTMLInputElement).value;
+  const name = ($("authName") as HTMLInputElement).value.trim();
+  if (!email) {
+    errorBox.textContent = "Please enter your email.";
+    errorBox.hidden = false;
+    return;
+  }
+  if (password.length < 8) {
+    errorBox.textContent = "Password must be at least 8 characters.";
+    errorBox.hidden = false;
+    return;
+  }
+  if (authMode === "signup" && !name) {
+    errorBox.textContent = "Please enter a display name.";
+    errorBox.hidden = false;
+    return;
+  }
+  const btn = $("authSubmitBtn") as HTMLButtonElement;
+  btn.disabled = true;
+  try {
+    if (authMode === "signup") await signUp(name, email, password);
+    else await signIn(email, password);
+    closeLogin();
+    toast(authMode === "signup" ? "Account created." : "Signed in.");
+  } catch (err) {
+    errorBox.textContent = err instanceof Error ? err.message : "Something went wrong.";
+    errorBox.hidden = false;
+  } finally {
+    btn.disabled = false;
+  }
 }
-function logout(): void {
-  loggedIn = false;
-  localStorage.removeItem("panpan-demo-login");
-  $("loginBtn").textContent = "Login";
-  $("loginBtn").onclick = openLogin;
-  toast("Logged out of demo account.");
+async function logout(): Promise<void> {
+  await logOut();
+  toast("Signed out.");
 }
 function requireLogin(): boolean {
-  if (!loggedIn) {
+  if (!currentUser) {
     $("loginRequired").classList.add("open");
     return false;
   }
@@ -610,10 +660,10 @@ async function loadComments(kind: "reader" | "detail", reset: boolean): Promise<
   const chapterId = kind === "reader" ? currentChapterId : null;
   if (kind === "detail") detailVisibleCount = COMMENTS_PAGE_SIZE;
   else readerVisibleCount = COMMENTS_PAGE_SIZE;
-  $(containerId).innerHTML = commentsConfigured
+  $(containerId).innerHTML = firebaseConfigured
     ? '<div class="empty">Loading…</div>'
     : '<div class="empty">Comments aren\'t set up yet.</div>';
-  if (!commentsConfigured) return;
+  if (!firebaseConfigured) return;
   try {
     const { fetchThread } = await import("./comments");
     commentThreads.set(threadKey(kind), await fetchThread(currentComic, chapterId));
@@ -636,23 +686,25 @@ function pickStar(btn: HTMLElement, n: number): void {
 }
 async function submitComment(kind: "reader" | "detail"): Promise<void> {
   if (!requireLogin()) return;
-  if (!commentsConfigured) {
+  if (!firebaseConfigured) {
     toast("Comments aren't set up yet.");
     return;
   }
   const prefix = kind === "reader" ? "reader" : "detail";
-  const name = ($(prefix + "Name") as HTMLInputElement).value.trim();
   const text = ($(prefix + "Comment") as HTMLTextAreaElement).value.trim();
   const stars = $(prefix + "Stars").dataset.rating;
-  if (!name || !text || !stars) {
-    toast("Please choose a rating, name and comment.");
+  if (!text || !stars) {
+    toast("Please choose a rating and write a comment.");
     return;
   }
+  const user = currentUser!;
+  const name = user.displayName || user.email || "Reader";
   try {
     const { postComment } = await import("./comments");
     const row = await postComment({
       manga_id: currentComic,
       chapter_id: kind === "reader" ? currentChapterId : null,
+      uid: user.uid,
       name,
       rating: Number(stars),
       body: text,
@@ -663,7 +715,6 @@ async function submitComment(kind: "reader" | "detail"): Promise<void> {
     else readerVisibleCount++;
     renderVisibleComments(kind);
     toast("Your " + (kind === "reader" ? "comment" : "review") + " was posted.");
-    ($(prefix + "Name") as HTMLInputElement).value = "";
     ($(prefix + "Comment") as HTMLTextAreaElement).value = "";
     $(prefix + "Stars").dataset.rating = "";
     $(prefix + "Stars")
@@ -684,7 +735,7 @@ function escapeHtml(v: string): string {
 }
 function openAccount(tab?: AccountTab): void {
   closeMobileMenu();
-  if (!loggedIn) {
+  if (!currentUser) {
     openLogin();
     return;
   }
@@ -699,10 +750,11 @@ async function accountTab(tab: AccountTab): Promise<void> {
     .querySelectorAll<HTMLElement>(".accountTab[data-tab]")
     .forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   const p = $("accountPanel");
+  const displayName = currentUser?.displayName || "Reader";
   if (tab === "overview")
-    p.innerHTML = `<div class="eyebrow">Overview</div><h2>Welcome back, Irfan.</h2><p>Your demo reading profile at a glance.</p><div class="statCards"><div class="statCard"><b>${followed.size}</b><span>Saved titles</span></div></div><div class="accountList"><div class="accountItem"><div><strong>Latest notification</strong><small>Check the notifications tab.</small></div><button class="secondary" onclick="accountTab('notifications')">View</button></div></div>`;
+    p.innerHTML = `<div class="eyebrow">Overview</div><h2>Welcome back, ${escapeHtml(displayName)}.</h2><p>Your reading profile at a glance.</p><div class="statCards"><div class="statCard"><b>${followed.size}</b><span>Saved titles</span></div></div><div class="accountList"><div class="accountItem"><div><strong>Latest notification</strong><small>Check the notifications tab.</small></div><button class="secondary" onclick="accountTab('notifications')">View</button></div></div>`;
   if (tab === "profile")
-    p.innerHTML = `<div class="eyebrow">Profile</div><h2>About you.</h2><p>Manage the public information shown on your demo profile.</p><div class="setting"><div><strong>Display name</strong><small>Irfan Demo</small></div><button class="secondary" onclick="toast('Demo profile editor opened.')">Edit</button></div><div class="setting"><div><strong>Email</strong><small>irfan@example.com</small></div><span class="typeBadge">EMAIL</span></div><div class="setting"><div><strong>Primary login</strong><small>Google</small></div><span class="statusBadge">CONNECTED</span></div><div class="setting"><div><strong>Public activity</strong><small>Show ratings and comments on your profile.</small></div><button class="toggle on" onclick="this.classList.toggle('on')"></button></div>`;
+    p.innerHTML = `<div class="eyebrow">Profile</div><h2>About you.</h2><p>Public information shown on your profile.</p><div class="setting"><div><strong>Display name</strong><small>${escapeHtml(displayName)}</small></div></div><div class="setting"><div><strong>Email</strong><small>${escapeHtml(currentUser?.email || "—")}</small></div><span class="typeBadge">EMAIL</span></div><div class="setting"><div><strong>Signed in with</strong><small>Email &amp; password</small></div><span class="statusBadge">CONNECTED</span></div>`;
   if (tab === "library") {
     p.innerHTML = `<div class="eyebrow">Library</div><h2>My library.</h2><p>Titles you follow are kept here.</p><div class="accountList" id="libraryList">Loading…</div>`;
     const ids = [...followed];
@@ -744,7 +796,7 @@ async function accountTab(tab: AccountTab): Promise<void> {
   if (tab === "settings")
     p.innerHTML = `<div class="eyebrow">Preferences</div><h2>Settings.</h2><p>Reader, appearance and notification preferences.</p><div class="setting"><div><strong>Auto next chapter</strong><small>Open the next chapter after finishing a reader page.</small></div><button class="toggle on" onclick="this.classList.toggle('on')"></button></div><div class="setting"><div><strong>Chapter notifications</strong><small>Notify me when followed comics update.</small></div><button class="toggle on" onclick="this.classList.toggle('on')"></button></div><div class="setting"><div><strong>Reduce animations</strong><small>Use simpler transitions on mobile.</small></div><button class="toggle" onclick="this.classList.toggle('on')"></button></div><div class="setting"><div><strong>Theme</strong><small>Switch between dark and light mode.</small></div><button class="secondary" onclick="toggleTheme()">Toggle theme</button></div><div class="setting"><div><strong>Reader preferences</strong><small>Open reader settings to customize page display.</small></div><button class="secondary" onclick="openCurrentReader()">Open reader</button></div>`;
   if (tab === "security")
-    p.innerHTML = `<div class="eyebrow">Security</div><h2>Account security.</h2><p>Demo controls only. No real credentials are stored.</p><div class="setting"><div><strong>Connected login</strong><small>Google · Primary login</small></div><span style="color:var(--red);font-weight:850">CONNECTED</span></div><div class="setting"><div><strong>Active sessions</strong><small>Android · Current demo session</small></div><button class="secondary" onclick="toast('Demo session list opened.')">Manage</button></div><div class="setting"><div><strong>Delete demo account</strong><small>This only resets the local demo state.</small></div><button class="secondary" onclick="logout();toast('Demo account reset.')">Reset</button></div>`;
+    p.innerHTML = `<div class="eyebrow">Security</div><h2>Account security.</h2><p>Manage how you're signed in.</p><div class="setting"><div><strong>Connected login</strong><small>Email &amp; password</small></div><span style="color:var(--red);font-weight:850">CONNECTED</span></div><div class="setting"><div><strong>Sign out</strong><small>End your session on this device.</small></div><button class="secondary" onclick="logout()">Sign out</button></div>`;
 }
 function toggleReaderSettings(): void {
   $("readerSettings").classList.toggle("open");
@@ -908,6 +960,14 @@ renderContinueReading();
 renderExplore();
 renderHomeGenre("All");
 
+onAuthChange((user) => {
+  currentUser = user;
+  const btn = $("loginBtn") as HTMLButtonElement;
+  btn.textContent = user ? "Logout" : "Login";
+  btn.onclick = user ? logout : openLogin;
+  if (!user && $("accountView").classList.contains("active")) goHome();
+});
+
 // The markup still relies on inline `onclick="fn(...)"` handlers, so the
 // functions those handlers call need to exist on `window` (ES modules do
 // not leak declarations into global scope the way a classic <script> did).
@@ -923,7 +983,8 @@ Object.assign(window, {
   toggleFollow,
   openLogin,
   closeLogin,
-  demoLogin,
+  submitAuth,
+  toggleAuthMode,
   logout,
   closeRequiredLogin,
   loadMoreComments,

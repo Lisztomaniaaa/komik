@@ -38,6 +38,10 @@ h1{font-size:clamp(48px,6vw,78px);line-height:.95;letter-spacing:-4px;margin:15p
 
 .toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,20px);background:#161719;border:1px solid var(--line);color:#eee;border-radius:11px;padding:12px 16px;z-index:100;opacity:0;pointer-events:none;transition:.2s;box-shadow:0 12px 35px rgba(0,0,0,.35)}.toast.show{opacity:1;transform:translate(-50%,0)}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;align-items:center;justify-content:center;z-index:80;padding:20px}.modal.open{display:flex}.modalBox{width:min(430px,100%);background:#111214;border:1px solid var(--line);border-radius:16px;padding:25px}.close{float:right;border:0;background:none;color:#999;width:36px;height:36px;padding:0;display:grid;place-items:center}.modalBox p{color:#999;line-height:1.6}.loginOption{width:100%;height:45px;margin-top:9px;border:1px solid var(--line);border-radius:10px;background:#0d0e0f;color:#eee;font-weight:800}.loginOption span{display:inline-grid;place-items:center;width:22px;height:22px;margin-right:8px;border-radius:50%;background:#fff;color:#4285f4;font-weight:900}
+.authField{width:100%;height:45px;margin-top:9px;border:1px solid var(--line);border-radius:10px;background:#0d0e0f;color:#eee;padding:0 14px;outline:none}.authField:focus{border-color:var(--red)}
+#authForm .primary{margin-top:14px}
+.authError{background:#351313;border:1px solid #70231f;color:#ff9d9d;border-radius:10px;padding:11px 13px;font-size:13px;margin-top:14px}
+.authSwitch{margin-top:16px;text-align:center;font-size:13px;color:#999}.authSwitch a{color:var(--red);font-weight:800}
 footer{border-top:1px solid var(--line);padding:34px 0;color:#666;font-size:12px;margin-top:50px}
 
 
@@ -85,8 +89,8 @@ footer{border-top:1px solid var(--line);padding:34px 0;color:#666;font-size:12px
 /* Light theme */
 body.light{--bg:#f5f6f4;--panel:#fff;--panel2:#eef1ee;--line:#d9ddd9;--text:#171918;--muted:#69706b;--red:#e53935;--red2:#d92e2a;background:var(--bg);color:var(--text)}
 body.light .topbar{background:rgba(245,246,244,.96)}
-body.light .search,body.light .iconbtn,body.light .secondary,body.light .back,body.light .select,body.light .readerNav button,body.light .filterPanel,body.light .filterBtn,body.light .sortSelect,body.light .genre,body.light .list,body.light .row,body.light .chapterRow,body.light .comment,body.light .reviewForm,body.light .reviewForm input,body.light .reviewForm textarea,body.light .readerSide,body.light .accountSide,body.light .accountPanel,body.light .accountItem,body.light .statCard,body.light .legalCard,body.light .mobileDrawer,body.light .modalBox,body.light .loginOption{background:#fff;color:var(--text)}
-body.light .search input,body.light .reviewForm input,body.light .reviewForm textarea{color:var(--text)}
+body.light .search,body.light .iconbtn,body.light .secondary,body.light .back,body.light .select,body.light .readerNav button,body.light .filterPanel,body.light .filterBtn,body.light .sortSelect,body.light .genre,body.light .list,body.light .row,body.light .chapterRow,body.light .comment,body.light .reviewForm,body.light .reviewForm input,body.light .reviewForm textarea,body.light .readerSide,body.light .accountSide,body.light .accountPanel,body.light .accountItem,body.light .statCard,body.light .legalCard,body.light .mobileDrawer,body.light .modalBox,body.light .loginOption,body.light .authField{background:#fff;color:var(--text)}
+body.light .search input,body.light .reviewForm input,body.light .reviewForm textarea,body.light .authField{color:var(--text)}
 body.light .navlinks,body.light .mobileDrawer a,body.light .meta,body.light .row small,body.light .chapterRow small,body.light .accountSide small,body.light .accountPanel>p,body.light .setting small,body.light .accountItem small,body.light .comment small,body.light .filterLabel,body.light .empty,body.light .muted,body.light .stats,body.light .hero p,body.light .detailIntro p,body.light .comment p,body.light .legalCard p,body.light .legalCard li{color:#69706b}
 body.light .filterBtn.active,body.light .genre.active{background:#fdebea;border-color:#e7b4b2;color:#9f201d}
 body.light .chapterRow:hover{background:#f0f2f0}

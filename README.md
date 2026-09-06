@@ -11,7 +11,8 @@ index.html         markup halaman (semua view: home, explore, detail, reader, ac
 src/style.css       semua styling (dark theme)
 src/types.ts        tipe data (Comic, ChapterEntry, Filters, CommentRow, dll.)
 src/mangadex.ts      client API MangaDex — fetch, mapping ke tipe Comic, genre/type/status filter
-src/firebase.ts       init Firebase app + Firestore instance dari env var
+src/firebase.ts       init Firebase app dari env var (dipakai bareng oleh auth.ts & comments.ts)
+src/auth.ts           login/signup/logout via Firebase Authentication (email & password)
 src/comments.ts       fetch/post komentar & review ke Firestore — lihat "Setup Firebase" di bawah
 src/app.ts           seluruh logic aplikasi (navigasi, filter, reader, login, dsb.)
 src/uiChrome.ts       perilaku menu mobile/drawer
@@ -82,44 +83,52 @@ di `vite.config.ts` ambil gambarnya di sisi server lalu diteruskan ke
 browser, sama seperti `/mdx` tapi untuk gambar. Karena host halaman chapter
 berubah-ubah per request, ini butuh function beneran, bukan rewrite statis.
 
-## Setup Firebase (komentar & review)
+## Setup Firebase (login & komentar/review)
 
-Komentar dan review sekarang disimpan permanen (bukan cuma nempel di layar
-terus ilang pas refresh) — butuh project Firebase punya sendiri. Ini
-langkah-langkahnya (gratis, ~5 menit):
+Login dan komentar/review sekarang beneran live pakai Firebase (bukan demo,
+bukan cuma nempel di layar terus ilang pas refresh) — butuh project Firebase
+punya sendiri. Ini langkah-langkahnya (gratis, ~5 menit):
 
 1. Buka [console.firebase.google.com](https://console.firebase.google.com)
    -> **Add project** (bisa pakai akun Google, tinggal beberapa klik).
-2. Di project itu, buka **Build -> Firestore Database** -> **Create
+2. Buka **Build -> Authentication** -> **Get started** -> tab **Sign-in
+   method** -> aktifkan provider **Email/Password** -> **Save**. Ini yang
+   bikin tombol Login di app beneran bisa dipakai (tanpa ini,
+   sign up/sign in bakal gagal walau kodenya sudah benar).
+3. Di project yang sama, buka **Build -> Firestore Database** -> **Create
    database** -> pilih lokasi -> mulai dalam **production mode**.
-3. Masih di Firestore, buka tab **Rules** -> hapus isi default-nya -> copy
+4. Masih di Firestore, buka tab **Rules** -> hapus isi default-nya -> copy
    paste isi file `firestore.rules` dari repo ini -> **Publish**. Ini yang
    menentukan siapa boleh baca/tulis komentar (aturan dasarnya sudah benar,
-   tidak perlu diubah).
-4. Balik ke **Project settings** (ikon gerigi) -> scroll ke **Your apps**
+   tidak perlu diubah) — sekarang mewajibkan akun yang sudah login buat
+   nge-post komentar.
+5. Balik ke **Project settings** (ikon gerigi) -> scroll ke **Your apps**
    -> klik ikon web `</>` -> kasih nama apa saja -> **Register app**.
    Firebase kasih blok kode config — catat 6 nilai di dalamnya
    (`apiKey`, `authDomain`, `projectId`, `storageBucket`,
    `messagingSenderId`, `appId`).
-5. Di **Vercel** (dashboard project ini) -> **Settings -> Environment
+6. Di **Vercel** (dashboard project ini) -> **Settings -> Environment
    Variables**, tambahkan 6 variabel sesuai nama di `.env.example`
-   (`VITE_FIREBASE_API_KEY`, dst.) — isinya dari nilai step 4.
-6. Redeploy (push apa saja, atau klik "Redeploy" di Vercel).
+   (`VITE_FIREBASE_API_KEY`, dst.) — isinya dari nilai step 5.
+7. Redeploy (push apa saja, atau klik "Redeploy" di Vercel).
 
 Kalau mau coba di `npm run dev` juga, copy `.env.example` jadi `.env.local`
 dan isi 6 nilai yang sama di situ (file ini gitignored, aman).
 
-**Tanpa 6 env var itu, app tetap jalan normal** — cuma bagian komentar
-yang nampilin "Comments aren't set up yet." alih-alih error.
+**Tanpa 6 env var itu, app tetap jalan normal** — tombol Login nampilin
+toast "Login isn't set up yet." dan komentar nampilin "Comments aren't set
+up yet." alih-alih error.
 
 **Catatan keamanan**: config Firebase itu memang didesain publik (ikut ke
 bundle JS, siapa saja bisa lihat) — yang benar-benar membatasi apa yang
-boleh dilakukan adalah **Firestore Rules** di `firestore.rules` (saat ini:
-siapa saja boleh baca & post komentar dengan validasi dasar — nama 1-60
-karakter, rating 1-5, teks maks 2000 karakter — tidak ada yang boleh
-edit/hapus punya orang lain). Karena belum ada login asli, tidak ada
-proteksi spam selain itu — begitu login sungguhan ada, rule create bisa
-diperketat pakai `request.auth.uid`.
+boleh dilakukan adalah **Firebase Authentication** (siapa yang bisa masuk)
+dan **Firestore Rules** di `firestore.rules` (siapa yang boleh baca/tulis
+data begitu masuk). Rule saat ini: siapa saja boleh baca komentar, tapi
+nge-post wajib login (`request.auth != null`) dan `uid` di data harus
+cocok sama akun yang login (`request.auth.uid`) — jadi orang tidak bisa
+nge-post ngatasnamakan akun lain. Validasi dasar tetap jalan (nama 1-60
+karakter, rating 1-5, teks maks 2000 karakter). Belum ada yang boleh
+edit/hapus komentar punya siapapun, termasuk punya sendiri.
 
 **Kenapa bukan Supabase**: awalnya dicoba Supabase, tapi koneksi MCP-nya
 putus di tengah setup dan tidak nyambung lagi — Firebase dipilih sebagai
@@ -132,8 +141,9 @@ JS, bukan di query, supaya nol langkah index manual di Firebase Console.
 
 - Chapter cuma dari `translatedLanguage=id`, fallback ke `en` kalau komiknya
   belum ada versi Indonesia.
-- Login, follow, dan reading-progress masih 100% lokal (localStorage per
-  browser) — belum ada backend buat itu. Komentar/review sudah live lewat
-  Firebase (lihat di atas); data komik sudah live lewat MangaDex.
+- Login sudah live lewat Firebase Authentication (email & password, lihat
+  "Setup Firebase" di atas). Follow dan reading-progress masih 100% lokal
+  (localStorage per browser) — belum ada backend buat itu. Komentar/review
+  sudah live lewat Firebase; data komik sudah live lewat MangaDex.
 - Progress baca (`panpan-progress` di localStorage) dipakai buat mengisi
   section "Continue reading" di homepage dan tab History di Account.
