@@ -40,9 +40,6 @@ export type AccountTab =
 
 export type SortMode = "latest" | "rating" | "az";
 
-export type ReaderMode = "single" | "continuous";
-export type ReaderBackground = "white" | "dark" | "black";
-
 export interface ReadingProgressEntry {
   percent: number;
   updated: number;

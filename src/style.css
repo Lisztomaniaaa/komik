@@ -10,7 +10,7 @@ button,input,textarea,select{font:inherit}button{cursor:pointer}a{text-decoratio
 .topbar{height:72px;border-bottom:1px solid var(--line);display:flex;align-items:center;position:sticky;top:0;z-index:40;background:rgba(9,9,9,.96);backdrop-filter:blur(14px)}
 .nav{display:flex;align-items:center;gap:28px}.logo{display:inline-flex;align-items:center;gap:8px;font-weight:950;font-size:22px;letter-spacing:-1.4px}.logo b{color:var(--red)}.logo small{font-size:9px;letter-spacing:4px;color:#777;margin-left:3px}.logoMark{height:32px;width:auto;display:block}
 .navlinks{display:flex;gap:21px;color:#999;font-size:13px}.navlinks a:hover,.navlinks a.active{color:var(--red)}
-.actions{margin-left:auto;display:flex;gap:8px;align-items:center}.search{width:220px;height:40px;border:1px solid var(--line);border-radius:10px;background:#101113;display:flex;align-items:center;padding:0 11px;color:#777}.search input{width:100%;border:0;outline:0;background:none;color:#eee;margin-left:7px}
+.actions{margin-left:auto;display:flex;gap:8px;align-items:center}
 .login,.primary{background:var(--red);border:1px solid var(--red);color:#fff;font-weight:850;border-radius:10px;padding:0 17px;height:40px}.iconbtn,.secondary{height:40px;border:1px solid var(--line);border-radius:10px;background:#101113;color:#eee;padding:0 13px}.mobilemenu{display:none}
 .view{display:none}.view.active{display:block}
 .hero{margin-top:28px;min-height:410px;border:1px solid var(--line);border-radius:20px;overflow:hidden;position:relative;background:#121315}
@@ -75,9 +75,9 @@ footer{border-top:1px solid var(--line);padding:34px 0;color:#666;font-size:12px
  .login{min-width:100px}
 }
 
-@media(max-width:900px){.navlinks{display:none}.search{width:170px}.grid{grid-template-columns:repeat(3,minmax(0,1fr))}.detailHero{grid-template-columns:190px 1fr}.readerLayout{grid-template-columns:1fr}.readerSide{display:none}.accountLayout{grid-template-columns:1fr}.accountSide{display:block}}
+@media(max-width:900px){.navlinks{display:none}.grid{grid-template-columns:repeat(3,minmax(0,1fr))}.detailHero{grid-template-columns:190px 1fr}.readerLayout{grid-template-columns:1fr}.readerSide{display:none}.accountLayout{grid-template-columns:1fr}.accountSide{display:block}}
 @media(max-width:620px){
- .container{width:calc(100% - 40px)}.topbar{height:64px}.search{display:none}.mobilemenu{display:block}.logo{font-size:20px}
+ .container{width:calc(100% - 40px)}.topbar{height:64px}.mobilemenu{display:block}.logo{font-size:20px}
  .hero{min-height:475px}.heroContent{padding:46px 24px}.heroart{width:100%;opacity:.35}h1{font-size:48px;letter-spacing:-3px}
  .grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}.section{padding-top:38px}.row{grid-template-columns:44px 1fr}.row .new{display:none}.thumb{width:44px;height:53px}
  .exploreHead{padding-top:30px}.exploreHead h1{font-size:44px}.filterLine{align-items:flex-start}.filterLabel{width:100%;margin-bottom:2px}.sortSelect{margin-left:0}
@@ -89,8 +89,8 @@ footer{border-top:1px solid var(--line);padding:34px 0;color:#666;font-size:12px
 /* Light theme */
 body.light{--bg:#f5f6f4;--panel:#fff;--panel2:#eef1ee;--line:#d9ddd9;--text:#171918;--muted:#69706b;--red:#e53935;--red2:#d92e2a;background:var(--bg);color:var(--text)}
 body.light .topbar{background:rgba(245,246,244,.96)}
-body.light .search,body.light .iconbtn,body.light .secondary,body.light .back,body.light .select,body.light .readerNav button,body.light .filterPanel,body.light .filterBtn,body.light .sortSelect,body.light .genre,body.light .list,body.light .row,body.light .chapterRow,body.light .comment,body.light .reviewForm,body.light .reviewForm input,body.light .reviewForm textarea,body.light .readerSide,body.light .accountSide,body.light .accountPanel,body.light .accountItem,body.light .statCard,body.light .legalCard,body.light .mobileDrawer,body.light .modalBox,body.light .loginOption,body.light .authField{background:#fff;color:var(--text)}
-body.light .search input,body.light .reviewForm input,body.light .reviewForm textarea,body.light .authField{color:var(--text)}
+body.light .iconbtn,body.light .secondary,body.light .back,body.light .select,body.light .readerNav button,body.light .filterPanel,body.light .filterBtn,body.light .sortSelect,body.light .genre,body.light .list,body.light .row,body.light .chapterRow,body.light .comment,body.light .reviewForm,body.light .reviewForm input,body.light .reviewForm textarea,body.light .readerSide,body.light .accountSide,body.light .accountPanel,body.light .accountItem,body.light .statCard,body.light .legalCard,body.light .mobileDrawer,body.light .modalBox,body.light .loginOption,body.light .authField{background:#fff;color:var(--text)}
+body.light .reviewForm input,body.light .reviewForm textarea,body.light .authField{color:var(--text)}
 body.light .navlinks,body.light .mobileDrawer a,body.light .meta,body.light .row small,body.light .chapterRow small,body.light .accountSide small,body.light .accountPanel>p,body.light .setting small,body.light .accountItem small,body.light .comment small,body.light .filterLabel,body.light .empty,body.light .muted,body.light .stats,body.light .hero p,body.light .detailIntro p,body.light .comment p,body.light .legalCard p,body.light .legalCard li{color:#69706b}
 body.light .filterBtn.active,body.light .genre.active{background:#fdebea;border-color:#e7b4b2;color:#9f201d}
 body.light .chapterRow:hover{background:#f0f2f0}
@@ -108,15 +108,11 @@ body.light .hero:after{background:linear-gradient(90deg,rgba(255,255,255,.98),rg
 body.light .heroart{opacity:.65}
 body.light .page{background:#fff}
 body.light footer{background:var(--bg)}
-.readerFullscreenBtn{min-width:118px}
-:fullscreen{background:var(--bg)}
-body.light:fullscreen{background:var(--bg)}
-@media(max-width:620px){.readerFullscreenBtn{flex:1}}
 
 /* v7 spacing + scrollbar cleanup */
 html,body{max-width:100%;overflow-x:hidden}
 .section,.detail,.reader,.account,.legalPage,.exploreHead{min-width:0}
-.list,.filterPanel,.comment,.reviewForm,.chapterScroll,.accountSide,.accountPanel,.legalCard{overflow:hidden}
+.list,.filterPanel,.comment,.reviewForm,.accountSide,.accountPanel,.legalCard{overflow:hidden}
 @media(max-width:620px){
  .container{width:calc(100% - 40px)}
  .section{padding-top:44px}
@@ -159,24 +155,15 @@ body.light .homeSearchClear{background:#eef1ee;color:#69706b}
 .cover img,.detailCover img,.thumb img,.miniCover img{width:100%;height:100%;object-fit:cover;display:block;position:relative;z-index:1}
 .cover::after{content:"";position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.035),transparent 42%,rgba(255,0,0,.08));pointer-events:none}
 .coverText{position:absolute;left:14px;right:14px;bottom:15px;z-index:2;margin:0}
-.searchResults{position:absolute;top:calc(100% + 8px);right:0;width:320px;max-height:380px;overflow:auto;border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:8px;display:none;z-index:100;box-shadow:0 18px 50px rgba(0,0,0,.28)}
-.searchWrap{position:relative}
-.searchResult{display:flex;gap:12px;align-items:center;padding:10px;border-radius:10px;cursor:pointer}.searchResult:hover{background:var(--panel2)}
-.searchResult .miniCover{width:42px;height:56px;border-radius:7px;flex:none;background:linear-gradient(145deg,#641715,#111)}
-.searchResult strong{display:block;font-size:13px}.searchResult small{display:block;color:var(--muted);margin-top:4px}
-.searchEmpty{padding:14px;color:var(--muted);font-size:13px}
 .ratingSummary{display:flex;gap:18px;align-items:center;margin:24px 0;padding:18px 20px;border:1px solid var(--line);border-radius:14px;background:var(--panel)}
 .ratingBig{font-size:34px;font-weight:950}.ratingStars{color:var(--red);letter-spacing:3px;font-size:18px}.ratingMeta{color:var(--muted);font-size:12px}
 .readerProgress{height:4px;background:var(--line);border-radius:999px;overflow:hidden;margin-top:16px}.readerProgress span{display:block;height:100%;width:0;background:var(--red);transition:width .15s}
-.readerTools{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}.readerSettings{display:none;border:1px solid var(--line);background:var(--panel);border-radius:14px;padding:16px;margin-bottom:18px}.readerSettings.open{display:block}.readerSettingRow{display:flex;justify-content:space-between;gap:18px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}.readerSettingRow:last-child{border-bottom:0}
-.readerSettingRow select,.readerSettingRow input{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:9px;padding:8px}
 .libraryEmpty{padding:22px;border:1px dashed var(--line);border-radius:12px;color:var(--muted)}
 .typeBadge{display:inline-block;padding:5px 8px;border-radius:999px;background:var(--panel2);font-size:10px;font-weight:850;color:var(--muted)}
 .statusBadge{display:inline-block;padding:5px 8px;border-radius:999px;background:#12291d;color:var(--green);font-size:10px;font-weight:850}
 body.light .statusBadge{background:#e8f5ed;color:#19753d}
-body.light .searchResults,body.light .ratingSummary,body.light .readerSettings{background:#fff}
-body.light .searchResult:hover{background:#f1f3f1}
-@media(max-width:700px){.searchResults{position:fixed;left:20px;right:20px;top:70px;width:auto}.ratingSummary{align-items:flex-start}.ratingBig{font-size:30px}.readerTools button{flex:1}.readerSettingRow{align-items:flex-start;flex-direction:column}}
+body.light .ratingSummary{background:#fff}
+@media(max-width:700px){.ratingSummary{align-items:flex-start}.ratingBig{font-size:30px}}
 
 
 /* v10 reader cleanup */
@@ -184,29 +171,12 @@ body.light .searchResult:hover{background:#f1f3f1}
 .readerTop{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center}
 .readerTop h2{grid-column:1/-1;font-size:28px;line-height:1.2}
 .readerTop .select{min-width:180px}
-.readerFullscreenBtn{min-width:180px}
-.readerTools{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
-.readerTools button{min-height:48px}
-.readerSettings{margin:0 0 20px;padding:20px}
-.readerSettingRow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:24px;align-items:center;padding:16px 0}
-.readerSettingRow > div{min-width:0}
-.readerSettingRow strong{display:block;font-size:16px;margin-bottom:5px}
-.readerSettingRow small{display:block;line-height:1.45;color:var(--muted)}
-.readerSettingRow select{min-width:170px}
 .followBtn{min-width:110px}
 @media(max-width:620px){
  .reader{padding-top:22px}
  .readerTop{grid-template-columns:1fr 1fr;gap:10px}
  .readerTop h2{font-size:22px;grid-column:1/-1;margin:4px 0 4px}
  .readerTop .select{min-width:0;width:100%}
- .readerFullscreenBtn{min-width:0;width:100%;flex:initial}
- .readerTools{grid-template-columns:1fr 1fr;gap:9px}
- .readerTools button:first-child{grid-column:1/-1}
- .readerSettings{padding:16px;margin-top:2px}
- .readerSettingRow{grid-template-columns:1fr;gap:10px;padding:15px 0}
- .readerSettingRow select,.readerSettingRow input{width:100%;max-width:100%}
- .readerSettingRow strong{font-size:15px}
- .readerSettingRow small{font-size:12px}
  .readerLayout{display:block}
  .page{border-radius:12px}
  .readerNav{gap:8px}
@@ -225,13 +195,10 @@ body.light .searchResult:hover{background:#f1f3f1}
   pointer-events:none;
 }
 
-.readerTop .select,
-.readerFullscreenBtn{
+.readerTop .select{
   height:60px;
 }
 
-.readerTools button,
-.readerFullscreenBtn,
 .readerNav button,
 .back{
   display:flex;
@@ -241,8 +208,6 @@ body.light .searchResult:hover{background:#f1f3f1}
   line-height:1;
 }
 
-.readerTools .svgIcon,
-.readerFullscreenBtn .svgIcon,
 .readerNav .svgIcon,
 .back .svgIcon{
   width:24px;
@@ -252,34 +217,13 @@ body.light .searchResult:hover{background:#f1f3f1}
   display:block;
 }
 
-.readerTools button{
-  min-height:60px;
-  white-space:nowrap;
-}
-
 @media(max-width:700px){
   .readerTop{
     grid-template-columns:1fr 1fr;
     align-items:stretch;
   }
-  .readerTop .select,
-  .readerFullscreenBtn{
+  .readerTop .select{
     height:58px;
-  }
-  .readerTools{
-    grid-template-columns:1fr 1fr;
-    align-items:stretch;
-  }
-  .readerTools button{
-    min-height:58px;
-  }
-  .readerTools button:first-child{
-    grid-column:1/-1;
-  }
-  .readerTools .svgIcon{
-    width:22px;
-    height:22px;
-    min-width:22px;
   }
   .coverText{
     left:14px;
@@ -295,9 +239,6 @@ body.light .searchResult:hover{background:#f1f3f1}
   }
   .readerTop h2{
     margin-bottom:4px;
-  }
-  .readerTools{
-    grid-template-columns:1fr 1fr;
   }
 }
 

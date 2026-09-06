@@ -35,7 +35,6 @@
 <a href="#genres" onclick="goHome();setTimeout(()=>document.getElementById('genres').scrollIntoView({behavior:'smooth'}),30);return false">Genres</a>
 </nav>
 <div class="actions">
-<div class="searchWrap"><label class="search"><svg class="svgIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg><input id="search" placeholder="Search comics..." autocomplete="off"></label><div id="searchResults" class="searchResults"></div></div>
 <button class="iconbtn iconOnly themeHeaderBtn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme"><svg class="svgIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 15.2A8.5 8.5 0 0 1 8.8 3.5 8.5 8.5 0 1 0 20.5 15.2Z"></path></svg></button>
 <button id="loginBtn" class="login" onclick="openLogin()">Login</button>
 <button id="mobileMenuBtn" class="iconbtn iconOnly mobilemenu" onclick="toggleMobileMenu()" title="Menu" aria-label="Open menu"><svg class="svgIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg></button>
@@ -64,7 +63,7 @@
 <section class="homeSearchSection" aria-label="Search comics">
   <div class="homeSearchWrap">
     <svg class="svgIcon homeSearchIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
-    <input id="homeSearch" class="homeSearchInput" type="search" placeholder="Search comics, genres or type..." autocomplete="off" aria-label="Search comics">
+    <input id="homeSearch" class="homeSearchInput" type="text" placeholder="Search comics, genres or type..." autocomplete="off" aria-label="Search comics">
     <button id="homeSearchClear" class="homeSearchClear" type="button" aria-label="Clear search" hidden>×</button>
     <div id="homeSearchResults" class="homeSearchResults"></div>
   </div>
@@ -108,9 +107,9 @@
 </div></div></section>
 
 <section id="readerView" class="view">
-<div class="reader"><button class="back" onclick="leaveReaderFullscreen();history.back()"><svg class="svgIcon" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"></path></svg><span>Back</span> to comic</button>
-<div class="readerTop" style="margin-top:24px"><h2 id="readerTitle">Solo Leveling · Chapter 200</h2><select class="select" id="readerSelect" onchange="changeChapter(this.value)"></select><span class="muted">Reading mode · Demo</span><button class="secondary readerFullscreenBtn" onclick="toggleReaderFullscreen()" id="readerFullscreenBtn"><svg class="svgIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M21 16v5h-5M3 16v5h5"></path></svg><span>Fullscreen</span></button></div>
-<div class="readerTools"><button class="secondary" onclick="toggleReaderSettings()"><svg class="svgIcon" viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"></path><path d="M4.9 4.9 6.3 6.3M17.7 17.7l1.4 1.4M4 12H2M22 12h-2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4M12 4V2M12 22v-2"></path></svg>Reader settings</button><button class="secondary" onclick="setReaderMode('fit')">Fit width</button><button class="secondary" onclick="setReaderMode('continuous')">Continuous</button></div><div id="readerSettings" class="readerSettings"><div class="readerSettingRow"><div><strong>Reading mode</strong><small class="muted">Choose how pages are displayed.</small></div><select id="readerMode" onchange="setReaderMode(this.value)"><option value="fit">Fit width</option><option value="continuous">Continuous</option><option value="single">Single page</option></select></div><div class="readerSettingRow"><div><strong>Background</strong><small class="muted">Reader background color.</small></div><select id="readerBg" onchange="setReaderBackground(this.value)"><option value="black">Black</option><option value="dark">Dark gray</option><option value="white">White</option></select></div><div class="readerSettingRow"><div><strong>Brightness</strong><small class="muted">Demo control.</small></div><input id="readerBrightness" type="range" min="60" max="100" value="100" oninput="setReaderBrightness(this.value)"></div></div><div class="readerProgress"><span id="readerProgressBar"></span></div><div class="readerLayout"><div><div class="page"><div class="comicPage"><div class="speech">ARISE.</div></div></div><div class="readerNav"><button onclick="prevChapter()"><svg class="svgIcon" viewBox="0 0 24 24"><path d="M15 18 9 12l6-6"></path></svg><span>Prev</span></button><button onclick="leaveReaderFullscreen();history.back()"><svg class="svgIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"></path></svg><span>List</span></button><button onclick="nextChapter()"><span>Next</span><svg class="svgIcon" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></svg></button></div></div><aside class="readerSide"><h3>Chapters</h3><div id="readerChapters"></div></aside></div>
+<div class="reader"><button class="back" onclick="history.back()"><svg class="svgIcon" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"></path></svg><span>Back</span> to comic</button>
+<div class="readerTop" style="margin-top:24px"><h2 id="readerTitle">Solo Leveling · Chapter 200</h2><select class="select" id="readerSelect" onchange="changeChapter(this.value)"></select></div>
+<div class="readerProgress"><span id="readerProgressBar"></span></div><div class="readerLayout"><div><div class="page"><div class="comicPage"><div class="speech">ARISE.</div></div></div><div class="readerNav"><button onclick="prevChapter()"><svg class="svgIcon" viewBox="0 0 24 24"><path d="M15 18 9 12l6-6"></path></svg><span>Prev</span></button><button onclick="history.back()"><svg class="svgIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"></path></svg><span>List</span></button><button onclick="nextChapter()"><span>Next</span><svg class="svgIcon" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></svg></button></div></div><aside class="readerSide"><h3>Chapters</h3><div id="readerChapters"></div></aside></div>
 <div class="comments readerComments"><div class="sectionHead"><h2>Chapter comments</h2><span style="color:#777;font-size:12px">Discuss this chapter</span></div><div class="commentGrid" id="readerComments"></div><div class="loadMoreWrap"><button class="loadMoreBtn" onclick="loadMoreComments('readerComments')">Load more comments</button></div>
 <div class="reviewForm"><b>Leave a comment.</b><div class="starsPick" id="readerStars"><button onclick="pickStar(this,1)">★</button><button onclick="pickStar(this,2)">★</button><button onclick="pickStar(this,3)">★</button><button onclick="pickStar(this,4)">★</button><button onclick="pickStar(this,5)">★</button></div><textarea id="readerComment" placeholder="Write about this chapter..."></textarea><button class="primary" onclick="submitComment('reader')">Post comment</button></div></div>
 </div></section>
@@ -142,9 +141,9 @@
 <div class="infoGrid">
 <article class="infoCard">
 <div class="faqItem"><h3>Is KomikVibe a real service?</h3><p>This prototype is a frontend demo. Accounts, comments, reading progress and other interactions are simulated locally.</p></div>
-<div class="faqItem"><h3>How do I start reading?</h3><p>Open a comic, choose a chapter, then use the reader controls to adjust the display mode or enter fullscreen.</p></div>
+<div class="faqItem"><h3>How do I start reading?</h3><p>Open a comic, choose a chapter, then scroll through the pages or use the Prev/Next buttons.</p></div>
 <div class="faqItem"><h3>Can I comment without logging in?</h3><p>No. You must log in before posting a comment or rating.</p></div>
-<div class="faqItem"><h3>How does login work?</h3><p>Google and email login are demo providers in this prototype. No real authentication is performed.</p></div>
+<div class="faqItem"><h3>How does login work?</h3><p>Login uses a real account (email &amp; password) via Firebase Authentication.</p></div>
 </article>
 <article class="infoCard">
 <div class="faqItem"><h3>Can I follow a comic?</h3><p>Yes. Followed titles are stored locally in the demo library.</p></div>
