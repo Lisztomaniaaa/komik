@@ -59,10 +59,13 @@ sukses di curl tapi gagal dengan "Failed to fetch" dari dalam browser). Vite's
 dev/preview proxy meneruskan `/mdx/*` ke `https://api.mangadex.org/*` supaya
 browser menganggapnya same-origin.
 
-**Ini cuma jalan untuk `npm run dev` dan `npm run preview`.** Kalau di-deploy
-ke hosting statis sungguhan (Vercel/Netlify/dst.), perlu rule proxy/rewrite
-yang setara di sana (serverless function atau redirect rule) — belum dibuatkan
-karena belum ada target deploy.
+**Ini cuma jalan untuk `npm run dev` dan `npm run preview`.** Untuk deploy di
+Vercel, `vercel.json` di root sudah berisi rewrite rule yang setara
+(`/mdx/:path*` -> `https://api.mangadex.org/:path*`) — otomatis aktif begitu
+Vercel build & deploy ulang. Kalau pindah ke hosting lain (Netlify/GitHub
+Pages/dst.), perlu rule proxy/redirect yang setara di sana juga; GitHub Pages
+khususnya tidak bisa proxy sama sekali (statis murni), jadi butuh proxy
+terpisah (misalnya Cloudflare Worker) kalau mau dipakai di situ.
 
 ## Catatan lain
 
