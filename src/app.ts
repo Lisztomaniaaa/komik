@@ -457,10 +457,16 @@ async function openReader(chapterId: string, id: string = currentComic): Promise
   $("readerView").querySelector(".page")!.innerHTML = '<div class="empty">Loading pages…</div>';
   window.scrollTo({ top: 0, behavior: "instant" });
   scrollTop();
-  history.pushState({ view: "reader", id, chapterId }, "", "#read-" + id + "::" + chapterId);
+  // Only the first entry into the reader is a real navigation (one history
+  // step, so the phone's back button/swipe returns straight to the comic).
+  // Switching chapters from inside the reader (prev/next, the chapter list,
+  // the <select>) replaces that same entry instead of pushing a new one —
+  // otherwise every chapter visited would need its own back press to get
+  // past, which reads as "back doesn't work".
+  const hash = "#read-" + id + "::" + chapterId;
+  if (enteringReader) history.pushState({ view: "reader", id, chapterId }, "", hash);
+  else history.replaceState({ view: "reader", id, chapterId }, "", hash);
   updateFullscreenButton();
-  if (enteringReader && !document.fullscreenElement && document.documentElement.requestFullscreen)
-    document.documentElement.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
 
   try {
     const [c, chapters, pages] = await Promise.all([
