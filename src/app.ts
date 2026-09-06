@@ -506,6 +506,7 @@ function goBackFromDetail(): void {
   history.back();
 }
 function toggleFollow(): void {
+  if (!requireLogin()) return;
   if (followed.has(currentComic)) {
     followed.delete(currentComic);
     toast("Removed from library.");
@@ -587,13 +588,10 @@ async function logout(): Promise<void> {
 }
 function requireLogin(): boolean {
   if (!currentUser) {
-    $("loginRequired").classList.add("open");
+    openLogin();
     return false;
   }
   return true;
-}
-function closeRequiredLogin(): void {
-  $("loginRequired").classList.remove("open");
 }
 function commentHtml(row: CommentRow): string {
   const when = new Date(row.created_at).toLocaleDateString();
@@ -897,7 +895,6 @@ Object.assign(window, {
   submitAuth,
   toggleAuthMode,
   logout,
-  closeRequiredLogin,
   loadMoreComments,
   pickStar,
   submitComment,
