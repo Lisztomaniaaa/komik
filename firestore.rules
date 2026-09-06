@@ -1,13 +1,15 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Comments & reviews. No real login yet (see README), so everyone
-    // shares the same public Firebase config — these rules are what
-    // actually decide what's allowed, not secrecy of that config.
+    // Comments & reviews. Posting requires a real signed-in account (see
+    // README's Firebase Auth setup step) — reading does not, so comments
+    // are visible to everyone.
     match /comments/{commentId} {
       allow read: if true;
 
-      allow create: if request.resource.data.name is string
+      allow create: if request.auth != null
+                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.name is string
                     && request.resource.data.name.size() > 0
                     && request.resource.data.name.size() <= 60
                     && request.resource.data.body is string
@@ -20,10 +22,9 @@ service cloud.firestore {
                     && request.resource.data.thread_id is string
                     && (request.resource.data.chapter_id == null || request.resource.data.chapter_id is string);
 
-      // Nobody can edit or delete anyone's comment — including their own —
-      // since there's no real user identity yet to scope that to. Once
-      // real accounts exist, insert can be scoped to request.auth.uid and
-      // an update/delete-your-own rule added.
+      // Nobody can edit or delete a comment, including their own, for now.
+      // A future update could allow the original poster to (request.auth.uid
+      // == resource.data.uid) once that's actually wired up client-side.
       allow update, delete: if false;
     }
   }
