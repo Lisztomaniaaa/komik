@@ -811,7 +811,15 @@ window.addEventListener("popstate", (e) => {
   else if (s === "#legal") openLegal((e.state as { title?: string } | null)?.title || "Terms of Use");
   else goHome();
 });
+function renderBuildVersion(): void {
+  const el = document.getElementById("buildVersion");
+  if (!el) return;
+  const d = new Date(__BUILD_TIME__);
+  el.textContent = `· Build ${d.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+}
+
 loadTheme();
+renderBuildVersion();
 renderTrending();
 renderLatestUpdates();
 renderContinueReading();
