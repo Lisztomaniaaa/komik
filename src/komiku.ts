@@ -167,47 +167,112 @@ export interface ListQuery {
   title?: string;
 }
 
-function pageFromOffset(offset: number, limit: number): number {
-  return Math.floor(offset / Math.max(1, limit)) + 1;
+function filterByType(comics: Comic[], q: ListQuery): Comic[] {
+  return q.type && q.type !== "All" ? comics.filter((c) => c.type === q.type) : comics;
+}
+function applySort(comics: Comic[], q: ListQuery): Comic[] {
+  return q.sort === "az" ? [...comics].sort((a, b) => a.title.localeCompare(b.title)) : comics;
 }
 
-// Komiku's site doesn't expose sort-by-rating (nothing to sort by — see
-// NO_RATING) or a status filter at list level, and pages come back at a
-// fixed ~10-per-page size rather than an exact total count. `total` below
-// is therefore a "just enough for the pager" estimate: current items plus
-// one more page's worth whenever the source signals more are available.
-function applyClientFilters(comics: Comic[], q: ListQuery): Comic[] {
-  let out = comics;
-  if (q.type && q.type !== "All") out = out.filter((c) => c.type === q.type);
-  if (q.sort === "az") out = [...out].sort((a, b) => a.title.localeCompare(b.title));
-  return out;
+// Komiku's /pustaka and /genre pages come back at a fixed ~10 raw items per
+// page, *before* our own type filter runs — a type filter on a mixed page
+// can otherwise leave a "page" with only 2 or 3 cards on it. To always fill
+// a full page, matching items are accumulated across as many underlying
+// pages as it takes (up to a cap), cached per filter combo so paging
+// forward/back doesn't re-fetch pages already seen.
+interface ListCursor {
+  buffer: Comic[];
+  nextRealPage: number;
+  exhausted: boolean;
+}
+const listCursors = new Map<string, ListCursor>();
+const MAX_UNDERLYING_FETCHES = 8;
+
+async function accumulate(
+  key: string,
+  need: number,
+  fetchRealPage: (realPage: number) => Promise<{ items: Comic[]; hasMore: boolean }>,
+): Promise<ListCursor> {
+  let cursor = listCursors.get(key);
+  if (!cursor) {
+    cursor = { buffer: [], nextRealPage: 1, exhausted: false };
+    listCursors.set(key, cursor);
+  }
+  let fetches = 0;
+  while (cursor.buffer.length < need && !cursor.exhausted && fetches < MAX_UNDERLYING_FETCHES) {
+    const { items, hasMore } = await fetchRealPage(cursor.nextRealPage);
+    cursor.buffer.push(...items);
+    cursor.nextRealPage += 1;
+    if (!hasMore) cursor.exhausted = true;
+    fetches += 1;
+  }
+  return cursor;
 }
 
 export async function fetchList(q: ListQuery): Promise<{ comics: Comic[]; total: number }> {
-  const page = pageFromOffset(q.offset, q.limit);
-
+  // Search has no page parameter on Komiku's side — it's always a single
+  // fixed batch, so there's nothing further to accumulate.
   if (q.title) {
     const json = await getJson<{ data: KomikuCard[] }>(`/search?q=${encodeURIComponent(q.title)}`);
-    const comics = applyClientFilters(json.data.map(toComicFromCard), q);
-    return { comics: comics.slice(0, q.limit), total: q.offset + comics.length };
+    const comics = filterByType(json.data.map(toComicFromCard), q);
+    return { comics: applySort(comics.slice(q.offset, q.offset + q.limit), q), total: q.offset + comics.length };
   }
 
-  if (q.genre && q.genre !== "All") {
-    const json = await getJson<{ data: KomikuCard[]; hasNextPage: boolean }>(`/genre/${q.genre}/page/${page}`);
-    const comics = applyClientFilters(json.data.map(toComicFromCard), q);
-    const total = q.offset + comics.length + (json.hasNextPage ? q.limit : 0);
-    return { comics, total };
-  }
+  const isGenre = Boolean(q.genre && q.genre !== "All");
+  const key = `${isGenre ? `genre:${q.genre}` : "pustaka"}:${q.type ?? "All"}`;
+  // A page-1 request means the filters just changed (or the user paged back
+  // to the start) — drop any stale accumulation so results match the
+  // current filters instead of a previous browse.
+  if (q.offset === 0) listCursors.delete(key);
 
-  const json = await getJson<{ results: KomikuCard[] }>(`/pustaka/page/${page}`);
-  const comics = applyClientFilters(json.results.map(toComicFromCard), q);
-  const total = q.offset + comics.length + (json.results.length >= 10 ? q.limit : 0);
+  const fetchRealPage = isGenre
+    ? async (realPage: number) => {
+        const json = await getJson<{ data: KomikuCard[]; hasNextPage: boolean }>(
+          `/genre/${q.genre}/page/${realPage}`,
+        );
+        return { items: filterByType(json.data.map(toComicFromCard), q), hasMore: json.hasNextPage };
+      }
+    : async (realPage: number) => {
+        const json = await getJson<{ results: KomikuCard[] }>(`/pustaka/page/${realPage}`);
+        return { items: filterByType(json.results.map(toComicFromCard), q), hasMore: json.results.length >= 10 };
+      };
+
+  const cursor = await accumulate(key, q.offset + q.limit, fetchRealPage);
+  const comics = applySort(cursor.buffer.slice(q.offset, q.offset + q.limit), q);
+  const total = cursor.buffer.length + (cursor.exhausted ? 0 : q.limit);
   return { comics, total };
 }
 
-export async function fetchPopular(limit = 5): Promise<Comic[]> {
-  const json = await getJson<KomikuCard[]>("/rekomendasi");
-  return json.slice(0, limit).map(toComicFromCard);
+// "All-time trending" has no single Komiku endpoint with enough items to
+// paginate on its own — /rekomendasi alone is under 10 titles — so this
+// merges it with every /komik-populer type section and dedupes by id.
+export async function fetchTrendingAllTime(): Promise<Comic[]> {
+  const [recommended, populer] = await Promise.all([
+    getJson<KomikuCard[]>("/rekomendasi"),
+    getJson<{ manga: { items: KomikuCard[] }; manhwa: { items: KomikuCard[] }; manhua: { items: KomikuCard[] } }>(
+      "/komik-populer",
+    ),
+  ]);
+  const seen = new Set<string>();
+  const merged: Comic[] = [];
+  for (const item of [
+    ...recommended,
+    ...populer.manga.items,
+    ...populer.manhwa.items,
+    ...populer.manhua.items,
+  ]) {
+    const comic = toComicFromCard(item);
+    if (comic.id && !seen.has(comic.id)) {
+      seen.add(comic.id);
+      merged.push(comic);
+    }
+  }
+  return merged;
+}
+
+export async function fetchLatestPool(max: number): Promise<Comic[]> {
+  const json = await getJson<KomikuCard[]>("/terbaru");
+  return json.slice(0, max).map(toComicFromCard);
 }
 
 export async function quickSearch(title: string, limit = 8): Promise<Comic[]> {

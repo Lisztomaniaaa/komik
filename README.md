@@ -62,6 +62,21 @@ MangaDex):
 - **Paginasi perkiraan**: endpoint Komiku tidak mengembalikan total item
   pasti, cuma sinyal "ada halaman berikutnya atau tidak" — jumlah halaman di
   UI adalah estimasi, bukan angka pasti seperti MangaDex.
+- **Filter tipe di level listing itu client-side**: `/pustaka` dan
+  `/genre/:slug` tidak punya parameter filter tipe (Manga/Manhwa/Manhua) di
+  sisi server, jadi `fetchList()` di `src/komiku.ts` menarik halaman demi
+  halaman dan menyaring sendiri sampai terkumpul cukup buat satu halaman
+  penuh (dibatasi max 8 kali fetch per klik biar tidak jalan tanpa henti
+  kalau filternya jarang ketemu). Hasilnya konsisten (selalu coba penuhi 10
+  item per halaman), tapi untuk kombinasi filter yang jarang bisa lebih
+  lambat karena beberapa halaman asli ditarik sekaligus.
+- **"Trending" (hari ini & sepanjang masa) hasil gabungan, bukan satu
+  endpoint**: Komiku tidak punya endpoint dengan cukup item buat
+  dipaginasi sendirian (`/rekomendasi` cuma ~9 judul) — "Top trending" itu
+  gabungan `/rekomendasi` + tiga bagian `/komik-populer` (dedup by slug),
+  sedangkan "Trending today" itu titel yang paling banyak dibuka hari ini
+  (lihat `src/views.ts`) digabung sisa slot dari `/terbaru` kalau belum
+  cukup. Keduanya ditarik sekali per sesi lalu dipaginasi di sisi klien.
 - Tipe komik (Manga/Manhwa/Manhua) dan genre didapat langsung dari field yang
   di-scrape, tidak perlu heuristik/tabel mapping seperti waktu masih pakai
   MangaDex.
@@ -129,8 +144,9 @@ data begitu masuk). Rule saat ini: siapa saja boleh baca komentar, tapi
 nge-post wajib login (`request.auth != null`) dan `uid` di data harus
 cocok sama akun yang login (`request.auth.uid`) — jadi orang tidak bisa
 nge-post ngatasnamakan akun lain. Validasi dasar tetap jalan (nama 1-60
-karakter, rating 1-5, teks maks 2000 karakter). Belum ada yang boleh
-edit/hapus komentar punya siapapun, termasuk punya sendiri.
+karakter, teks maks 2000 karakter). Komentar tidak punya rating bintang
+(dulu ada, dihapus karena dianggap ribet) — cuma teks polos. Belum ada
+yang boleh edit/hapus komentar punya siapapun, termasuk punya sendiri.
 
 Counter view (`views/<tanggal>/mangas/<slug>`) rule-nya beda: siapa saja
 boleh nulis (gak wajib login, karena semua pengunjung ikut dihitung), tapi
@@ -161,8 +177,12 @@ JS, bukan di query, supaya nol langkah index manual di Firebase Console.
 - Daftar genre (home & Explore) ditarik langsung dari endpoint `/genre-all`
   Komiku (~100 tag), bukan daftar hardcoded — lihat `EXCLUDED_GENRE_SLUGS`
   di `src/komiku.ts` untuk tag yang sengaja di-skip (konten eksplisit/dewasa
-  dan beberapa tag rusak/duplikat hasil scrape).
+  dan beberapa tag rusak/duplikat hasil scrape). Karena banyak, cuma 18
+  yang tampil duluan dengan tombol "Show more" buat lihat sisanya.
 - Bottom navbar (Home/Explore/Library/Account) cuma muncul di layar sempit
   (≤900px) — di desktop navigasinya tetap lewat top bar seperti biasa.
   "Library" dan "Account" sama-sama masuk ke halaman Account (tab berbeda),
   keduanya butuh login.
+- Search di top bar disembunyikan di layar ≤620px (kepentok lebar), diganti
+  ikon kaca pembesar di sebelah hamburger menu yang membuka kotak
+  pencariannya sebagai overlay.
