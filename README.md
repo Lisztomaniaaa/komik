@@ -14,6 +14,7 @@ src/komiku.ts        client API Komiku — fetch, mapping ke tipe Comic, genre/t
 src/firebase.ts       init Firebase app dari env var (dipakai bareng oleh auth.ts & comments.ts)
 src/auth.ts           login/signup/logout via Firebase Authentication (email & password)
 src/comments.ts       fetch/post komentar & review ke Firestore — lihat "Setup Firebase" di bawah
+src/views.ts          counter view harian di Firestore, buat section "Trending today"
 src/app.ts           seluruh logic aplikasi (navigasi, filter, reader, login, dsb.)
 src/uiChrome.ts       perilaku menu mobile/drawer
 src/main.ts           entry point, cuma import file-file di atas
@@ -78,10 +79,13 @@ Kalau API itu mati (limit Vercel gratis gampang kena kalau traffic naik —
 persis ini yang bikin instance publik aslinya mati), sumber data ikut mati
 sampai di-deploy ulang secara manual — tidak ada fallback otomatis.
 
-## Setup Firebase (login & komentar/review)
+## Setup Firebase (login, komentar/review, trending hari ini)
 
 Login dan komentar/review sekarang beneran live pakai Firebase (bukan demo,
-bukan cuma nempel di layar terus ilang pas refresh) — butuh project Firebase
+bukan cuma nempel di layar terus ilang pas refresh) — begitu juga counter
+view yang mengisi section "Trending today" di homepage (lihat `src/views.ts`
+— Komiku sendiri tidak punya data view/read, jadi ini dihitung sendiri dari
+tiap kali halaman detail komik dibuka). Semua ini butuh project Firebase
 punya sendiri. Ini langkah-langkahnya (gratis, ~5 menit):
 
 1. Buka [console.firebase.google.com](https://console.firebase.google.com)
@@ -94,9 +98,12 @@ punya sendiri. Ini langkah-langkahnya (gratis, ~5 menit):
    database** -> pilih lokasi -> mulai dalam **production mode**.
 4. Masih di Firestore, buka tab **Rules** -> hapus isi default-nya -> copy
    paste isi file `firestore.rules` dari repo ini -> **Publish**. Ini yang
-   menentukan siapa boleh baca/tulis komentar (aturan dasarnya sudah benar,
-   tidak perlu diubah) — sekarang mewajibkan akun yang sudah login buat
-   nge-post komentar.
+   menentukan siapa boleh baca/tulis komentar dan counter view (aturan
+   dasarnya sudah benar, tidak perlu diubah) — posting komentar wajib login,
+   sedangkan counter view boleh ditulis siapa saja (termasuk yang belum
+   login) tapi cuma boleh naik 1 per request, tidak bisa dimanipulasi ke
+   angka sembarang. **Kalau sebelumnya udah pernah publish rules lama,
+   publish ulang** supaya collection `views` baru ikut ke-cover.
 5. Balik ke **Project settings** (ikon gerigi) -> scroll ke **Your apps**
    -> klik ikon web `</>` -> kasih nama apa saja -> **Register app**.
    Firebase kasih blok kode config — catat 6 nilai di dalamnya
@@ -125,6 +132,13 @@ nge-post ngatasnamakan akun lain. Validasi dasar tetap jalan (nama 1-60
 karakter, rating 1-5, teks maks 2000 karakter). Belum ada yang boleh
 edit/hapus komentar punya siapapun, termasuk punya sendiri.
 
+Counter view (`views/<tanggal>/mangas/<slug>`) rule-nya beda: siapa saja
+boleh nulis (gak wajib login, karena semua pengunjung ikut dihitung), tapi
+tiap write cuma boleh berisi field `count` yang naik tepat 1 dari nilai
+sebelumnya (atau `1` untuk dokumen baru) — dicoba langsung lewat emulator
+dan percobaan nge-set angka sembarang (`count: 9999`) atau nambah field
+lain memang ditolak.
+
 **Kenapa bukan Supabase**: awalnya dicoba Supabase, tapi koneksi MCP-nya
 putus di tengah setup dan tidak nyambung lagi — Firebase dipilih sebagai
 gantinya. Desain query komentarnya sengaja menghindari kombinasi
@@ -144,3 +158,11 @@ JS, bukan di query, supaya nol langkah index manual di Firebase Console.
   sudah live lewat Komiku (lihat "Sumber data" di atas).
 - Progress baca (`panpan-progress` di localStorage) dipakai buat mengisi
   section "Continue reading" di homepage dan tab History di Account.
+- Daftar genre (home & Explore) ditarik langsung dari endpoint `/genre-all`
+  Komiku (~100 tag), bukan daftar hardcoded — lihat `EXCLUDED_GENRE_SLUGS`
+  di `src/komiku.ts` untuk tag yang sengaja di-skip (konten eksplisit/dewasa
+  dan beberapa tag rusak/duplikat hasil scrape).
+- Bottom navbar (Home/Explore/Library/Account) cuma muncul di layar sempit
+  (≤900px) — di desktop navigasinya tetap lewat top bar seperti biasa.
+  "Library" dan "Account" sama-sama masuk ke halaman Account (tab berbeda),
+  keduanya butuh login.

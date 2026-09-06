@@ -27,5 +27,21 @@ service cloud.firestore {
       // == resource.data.uid) once that's actually wired up client-side.
       allow update, delete: if false;
     }
+
+    // Daily view counters that power the "Trending today" home section (see
+    // src/views.ts) — one document per manga per day, holding only a single
+    // integer that can ever go up by exactly 1 at a time. No login required
+    // to write: every visitor's view counts, not just signed-in ones.
+    match /views/{date}/mangas/{mangaId} {
+      allow read: if true;
+
+      allow create: if request.resource.data.keys().hasOnly(['count'])
+                    && request.resource.data.count == 1;
+
+      allow update: if request.resource.data.keys().hasOnly(['count'])
+                    && request.resource.data.count == resource.data.count + 1;
+
+      allow delete: if false;
+    }
   }
 }

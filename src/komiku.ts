@@ -193,8 +193,7 @@ export async function fetchList(q: ListQuery): Promise<{ comics: Comic[]; total:
   }
 
   if (q.genre && q.genre !== "All") {
-    const slug = q.genre.toLowerCase().replace(/\s+/g, "-");
-    const json = await getJson<{ data: KomikuCard[]; hasNextPage: boolean }>(`/genre/${slug}/page/${page}`);
+    const json = await getJson<{ data: KomikuCard[]; hasNextPage: boolean }>(`/genre/${q.genre}/page/${page}`);
     const comics = applyClientFilters(json.data.map(toComicFromCard), q);
     const total = q.offset + comics.length + (json.hasNextPage ? q.limit : 0);
     return { comics, total };
@@ -211,13 +210,43 @@ export async function fetchPopular(limit = 5): Promise<Comic[]> {
   return json.slice(0, limit).map(toComicFromCard);
 }
 
-export async function fetchLatestUpdates(limit = 3): Promise<Comic[]> {
-  const json = await getJson<KomikuCard[]>("/terbaru");
-  return json.slice(0, limit).map(toComicFromCard);
-}
-
 export async function quickSearch(title: string, limit = 8): Promise<Comic[]> {
   if (!title.trim()) return [];
   const json = await getJson<{ data: KomikuCard[] }>(`/search?q=${encodeURIComponent(title)}`);
   return json.data.slice(0, limit).map(toComicFromCard);
+}
+
+export interface Genre {
+  title: string;
+  slug: string;
+}
+
+// Komiku's own genre list, minus explicit/adult-content tags (this is a
+// browsable genre list, not an explicit-content finder) and a few garbled
+// or duplicate scrape artifacts (e.g. both "martial-art" and
+// "martial-arts" exist as separate tags for the same genre).
+const EXCLUDED_GENRE_SLUGS = new Set([
+  "adult",
+  "ecchi",
+  "hentai",
+  "smut",
+  "sexual-violence",
+  "shotacon",
+  "mature",
+  "martial-art",
+  "one-shot",
+  "shoujog",
+  "mangatoon",
+]);
+
+let genresCache: Genre[] | null = null;
+
+export async function fetchGenres(): Promise<Genre[]> {
+  if (genresCache) return genresCache;
+  const json = await getJson<{ title: string; slug: string }[]>("/genre-all");
+  genresCache = json
+    .filter((g) => g.slug && !EXCLUDED_GENRE_SLUGS.has(g.slug))
+    .map((g) => ({ slug: g.slug, title: g.title.replace(/\s*\(\d[\d.]*\)\s*$/, "") }))
+    .sort((a, b) => a.title.localeCompare(b.title));
+  return genresCache;
 }

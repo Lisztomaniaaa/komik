@@ -3,7 +3,7 @@ import { firebaseConfigured } from "./firebaseConfig";
 import {
   fetchChapterPages,
   fetchChapters,
-  fetchLatestUpdates,
+  fetchGenres,
   fetchList,
   fetchMangaDetail,
   fetchPopular,
@@ -42,6 +42,8 @@ let sortMode: SortMode = "latest";
 let explorePage = 1;
 let homeGenrePage = 1;
 let homeGenreCurrent = "All";
+let latestPage = 1;
+let latestType: Filters["type"] = "All";
 const PAGE_SIZE = 10;
 const COMMENTS_PAGE_SIZE = 10;
 // Each thread (a manga's reviews, or one chapter's comments) is fetched
@@ -99,9 +101,12 @@ function showExplore(): void {
   scrollTop();
   history.pushState({ view: "explore" }, "", "#explore");
 }
-function setNav(which: "home" | "explore" | ""): void {
+function setNav(which: "home" | "explore" | "library" | "account" | ""): void {
   $("navHome").classList.toggle("active", which === "home");
   $("navExplore").classList.toggle("active", which === "explore");
+  document
+    .querySelectorAll<HTMLElement>(".bottomNavItem")
+    .forEach((b) => b.classList.toggle("active", b.dataset.nav === which));
 }
 async function comicBy(id: string): Promise<Comic> {
   const cached = mangaCache.get(id);
@@ -125,12 +130,9 @@ function cardHtml(c: Comic, rank?: number): string {
   return `<div class="card" onclick="openComic('${c.id}')"><div class="cover">${rank ? `<span class="rank">#${rank}</span>` : `<span class="rank">${c.type}</span>`}${cover}</div><div class="title">${c.title}</div><div class="meta">${c.type} · ${c.status} · <span class="star">★ ${c.rating}</span></div></div>`;
 }
 
-async function renderHomeSearchResults(): Promise<void> {
-  const input = document.getElementById("homeSearch") as HTMLInputElement | null;
-  const box = document.getElementById("homeSearchResults");
-  if (!input || !box) return;
-  const q = (input.value || "").trim();
-  ($("homeSearchClear") as HTMLElement).hidden = !q;
+async function renderSearchResults(): Promise<void> {
+  const box = $("searchResults");
+  const q = (($("search") as HTMLInputElement).value || "").trim();
   if (!q) {
     box.style.display = "none";
     box.innerHTML = "";
@@ -141,27 +143,19 @@ async function renderHomeSearchResults(): Promise<void> {
     list
       .map(
         (c) =>
-          `<div class="homeSearchResult" onclick="openComic('${c.id}');hideHomeSearchResults()"><div class="miniCover">${c.cover ? `<img src="${c.cover}" alt="">` : ""}</div><div><strong>${c.title}</strong><small>${c.type} · ${c.status} · ★ ${c.rating}</small></div></div>`,
+          `<div class="searchResult" onclick="openComic('${c.id}');hideSearchResults()"><div class="miniCover">${c.cover ? `<img src="${c.cover}" alt="">` : ""}</div><div><strong>${c.title}</strong><small>${c.type} · ${c.status} · ★ ${c.rating}</small></div></div>`,
       )
-      .join("") || '<div class="homeSearchEmpty">No comics found.</div>';
+      .join("") || '<div class="searchEmpty">No comics found.</div>';
   box.style.display = "block";
 }
-function hideHomeSearchResults(): void {
-  const b = document.getElementById("homeSearchResults");
-  if (b) b.style.display = "none";
-}
-function clearHomeSearch(): void {
-  const i = document.getElementById("homeSearch") as HTMLInputElement | null;
-  if (!i) return;
-  i.value = "";
-  ($("homeSearchClear") as HTMLElement).hidden = true;
-  hideHomeSearchResults();
-  i.focus();
+function hideSearchResults(): void {
+  $("searchResults").style.display = "none";
 }
 
 let exploreRequestId = 0;
 async function renderExplore(): Promise<void> {
   const grid = $("exploreGrid");
+  const q = (($("search") as HTMLInputElement).value || "").trim();
   const requestId = ++exploreRequestId;
   grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Loading…</div>';
   try {
@@ -172,6 +166,7 @@ async function renderExplore(): Promise<void> {
       type: filters.type,
       genre: filters.genre,
       status: filters.status,
+      title: q || undefined,
     });
     if (requestId !== exploreRequestId) return;
     const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -210,6 +205,40 @@ async function renderHomeGenre(genre = "All"): Promise<void> {
     grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Failed to load comics from Komiku.</div>';
   }
 }
+let genreChipsRendered = false;
+async function renderGenreChips(): Promise<void> {
+  if (genreChipsRendered) return;
+  genreChipsRendered = true;
+  try {
+    const genres = await fetchGenres();
+    const homeBox = document.getElementById("homeGenres");
+    if (homeBox) {
+      homeBox.insertAdjacentHTML(
+        "beforeend",
+        genres
+          .map(
+            (g) =>
+              `<span class="genre" onclick="setHomeGenre('${g.slug}',this)">${escapeHtml(g.title)}</span>`,
+          )
+          .join(""),
+      );
+    }
+    const exploreBox = document.getElementById("exploreGenreButtons");
+    if (exploreBox) {
+      exploreBox.insertAdjacentHTML(
+        "beforeend",
+        genres
+          .map(
+            (g) =>
+              `<button class="filterBtn" data-filter="genre" data-value="${g.slug}" onclick="filterBy('genre','${g.slug}')">${escapeHtml(g.title)}</button>`,
+          )
+          .join(""),
+      );
+    }
+  } catch {
+    genreChipsRendered = false;
+  }
+}
 function setHomeGenre(genre: string, btn: HTMLElement): void {
   document.querySelectorAll("#genres .genre").forEach((b) => b.classList.remove("active"));
   btn.classList.add("active");
@@ -220,7 +249,7 @@ function renderPagination(
   id: string,
   page: number,
   pages: number,
-  handler: "setExplorePage" | "setHomeGenrePage",
+  handler: "setExplorePage" | "setHomeGenrePage" | "setLatestPage",
   total: number,
 ): void {
   const box = document.getElementById(id);
@@ -252,6 +281,18 @@ function setHomeGenrePage(page: number): void {
   renderHomeGenre(homeGenreCurrent);
   document.getElementById("genres")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
+function setLatestPage(page: number): void {
+  latestPage = page;
+  renderLatestUpdates();
+  document.getElementById("latest")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+function setLatestType(type: string, btn: HTMLElement): void {
+  document.querySelectorAll("#latestTypeFilter .genre").forEach((b) => b.classList.remove("active"));
+  btn.classList.add("active");
+  latestType = type as Filters["type"];
+  latestPage = 1;
+  renderLatestUpdates();
+}
 
 async function renderTrending(): Promise<void> {
   const grid = document.getElementById("trendingGrid");
@@ -264,19 +305,61 @@ async function renderTrending(): Promise<void> {
     grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Failed to load trending comics.</div>';
   }
 }
-async function renderLatestUpdates(): Promise<void> {
-  const list = document.getElementById("latestList");
-  if (!list) return;
+
+const TRENDING_TODAY_COUNT = 15;
+async function renderTrendingToday(): Promise<void> {
+  const track = document.getElementById("trendingTodayTrack");
+  if (!track) return;
   try {
-    const comics = await fetchLatestUpdates(3);
-    list.innerHTML = comics
-      .map(
-        (c) =>
-          `<div class="row" style="cursor:pointer" onclick="openComic('${c.id}')"><div class="thumb">${c.cover ? `<img src="${c.cover}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:7px">` : ""}</div><div><strong>${c.title}</strong><small>Chapter ${c.chapters}</small></div><span class="new">NEW</span></div>`,
-      )
-      .join("");
+    let list: Comic[] = [];
+    if (firebaseConfigured) {
+      const { fetchTopViewedToday } = await import("./views");
+      const ids = await fetchTopViewedToday(TRENDING_TODAY_COUNT);
+      const found = await Promise.all(ids.map((id) => comicBy(id).catch(() => null)));
+      list = found.filter((c): c is Comic => c !== null);
+    }
+    // Cold start (no views recorded yet today) or too few of them: fill the
+    // rest with recently-updated titles so the strip is never empty.
+    if (list.length < TRENDING_TODAY_COUNT) {
+      const seen = new Set(list.map((c) => c.id));
+      const { comics: recent } = await fetchList({ offset: 0, limit: TRENDING_TODAY_COUNT, sort: "latest" });
+      for (const c of recent) {
+        if (list.length >= TRENDING_TODAY_COUNT) break;
+        if (!seen.has(c.id)) {
+          list.push(c);
+          seen.add(c.id);
+        }
+      }
+    }
+    track.innerHTML =
+      list.map((c, i) => cardHtml(c, i + 1)).join("") || '<div class="empty">No comics right now.</div>';
   } catch {
-    list.innerHTML = '<div class="empty">Failed to load latest updates.</div>';
+    track.innerHTML = '<div class="empty">Failed to load trending comics.</div>';
+  }
+}
+let latestRequestId = 0;
+async function renderLatestUpdates(): Promise<void> {
+  const grid = document.getElementById("latestGrid");
+  if (!grid) return;
+  const requestId = ++latestRequestId;
+  grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Loading…</div>';
+  try {
+    const { comics, total } = await fetchList({
+      offset: (latestPage - 1) * PAGE_SIZE,
+      limit: PAGE_SIZE,
+      sort: "latest",
+      type: latestType,
+    });
+    if (requestId !== latestRequestId) return;
+    const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    latestPage = Math.min(Math.max(1, latestPage), pages);
+    grid.innerHTML =
+      comics.map((c) => cardHtml(c)).join("") ||
+      '<div class="empty" style="grid-column:1/-1">No comics match this filter.</div>';
+    renderPagination("latestPagination", latestPage, pages, "setLatestPage", total);
+  } catch {
+    if (requestId !== latestRequestId) return;
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Failed to load comics from Komiku.</div>';
   }
 }
 async function renderContinueReading(): Promise<void> {
@@ -373,6 +456,12 @@ async function openComic(id: string): Promise<void> {
   $("chapterList").innerHTML = "";
   scrollTop();
   history.pushState({ view: "detail", id }, "", "#comic-" + id);
+
+  if (firebaseConfigured) {
+    import("./views")
+      .then(({ trackView }) => trackView(id))
+      .catch(() => {});
+  }
 
   try {
     const [c, chapters] = await Promise.all([comicBy(id), getChaptersFor(id)]);
@@ -713,6 +802,7 @@ function openAccount(tab?: AccountTab): void {
   }
   hideViews();
   $("accountView").classList.add("active");
+  setNav(tab === "library" ? "library" : "account");
   accountTab(tab || "overview");
   scrollTop();
   history.pushState({ view: "account", tab: tab || "overview" }, "", "#account");
@@ -824,23 +914,24 @@ document.addEventListener(
   true,
 );
 
-const debouncedHomeSearch = debounce(() => renderHomeSearchResults(), 300);
+const debouncedExplore = debounce(() => renderExplore(), 300);
+const debouncedSearch = debounce(() => renderSearchResults(), 300);
 
-const homeSearch = document.getElementById("homeSearch") as HTMLInputElement | null;
-if (homeSearch) {
-  homeSearch.addEventListener("input", debouncedHomeSearch);
-  homeSearch.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      const first = $("homeSearchResults").querySelector<HTMLElement>(".homeSearchResult");
-      if (first) first.click();
-      else showExplore();
-    }
-  });
-  $("homeSearchClear").addEventListener("click", clearHomeSearch);
-  document.addEventListener("click", (e) => {
-    if (!(e.target as HTMLElement).closest(".homeSearchWrap")) hideHomeSearchResults();
-  });
-}
+const searchInput = $("search") as HTMLInputElement;
+searchInput.addEventListener("input", () => {
+  debouncedSearch();
+  if ($("exploreView").classList.contains("active")) debouncedExplore();
+});
+document.addEventListener("click", (e) => {
+  if (!(e.target as HTMLElement).closest(".searchWrap")) hideSearchResults();
+});
+searchInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    const first = $("searchResults").querySelector<HTMLElement>(".searchResult");
+    if (first) first.click();
+    else showExplore();
+  }
+});
 window.addEventListener("popstate", (e) => {
   const s = location.hash;
   if (s.startsWith("#read-")) {
@@ -864,6 +955,8 @@ function renderBuildVersion(): void {
 
 loadTheme();
 renderBuildVersion();
+renderGenreChips();
+renderTrendingToday();
 renderTrending();
 renderLatestUpdates();
 renderContinueReading();
@@ -913,8 +1006,9 @@ Object.assign(window, {
   setHomeGenre,
   setExplorePage,
   setHomeGenrePage,
-  hideHomeSearchResults,
-  clearHomeSearch,
+  setLatestPage,
+  setLatestType,
+  hideSearchResults,
   openCurrentReader,
   startReading,
 });
