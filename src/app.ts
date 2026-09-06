@@ -1,4 +1,4 @@
-import { commentsConfigured, fetchComments, postComment } from "./comments";
+import { commentsConfigured } from "./commentsConfig";
 import {
   fetchChapterPages,
   fetchChapters,
@@ -43,8 +43,12 @@ let homeGenrePage = 1;
 let homeGenreCurrent = "All";
 const PAGE_SIZE = 10;
 const COMMENTS_PAGE_SIZE = 10;
-let detailCommentOffset = 0;
-let readerCommentOffset = 0;
+// Each thread (a manga's reviews, or one chapter's comments) is fetched
+// once and cached whole; "load more" just reveals more of the cached,
+// already-sorted array rather than hitting the network again.
+const commentThreads = new Map<string, CommentRow[]>();
+let detailVisibleCount = COMMENTS_PAGE_SIZE;
+let readerVisibleCount = COMMENTS_PAGE_SIZE;
 
 // Comic detail and chapter-list lookups hit the network, so cache them for
 // the lifetime of the page (re-opening a comic or paging prev/next chapter
@@ -571,43 +575,53 @@ function commentLoadMoreBtn(containerId: string): HTMLButtonElement | null {
     .getElementById(containerId)
     ?.parentElement?.querySelector<HTMLButtonElement>(".loadMoreBtn") ?? null;
 }
-async function loadComments(kind: "reader" | "detail", reset: boolean): Promise<void> {
-  const containerId = kind === "detail" ? "detailComments" : "readerComments";
+function threadKey(kind: "reader" | "detail"): string {
   const chapterId = kind === "reader" ? currentChapterId : null;
-  const box = $(containerId);
+  return currentComic + "::" + (chapterId ?? "detail");
+}
+function renderVisibleComments(kind: "reader" | "detail"): void {
+  const containerId = kind === "detail" ? "detailComments" : "readerComments";
+  const rows = commentThreads.get(threadKey(kind)) ?? [];
+  const visible = kind === "detail" ? detailVisibleCount : readerVisibleCount;
+  $(containerId).innerHTML =
+    rows.length === 0
+      ? '<div class="empty">No comments yet — be the first to write one.</div>'
+      : rows.slice(0, visible).map(commentHtml).join("");
   const btn = commentLoadMoreBtn(containerId);
-  if (reset) {
-    if (kind === "detail") detailCommentOffset = 0;
-    else readerCommentOffset = 0;
-    box.innerHTML = commentsConfigured ? "" : '<div class="empty">Comments aren\'t set up yet.</div>';
-    if (btn) {
-      btn.textContent = "Load more comments";
-      btn.disabled = false;
-      btn.style.opacity = "";
-    }
-  }
-  if (!commentsConfigured) return;
-  const offset = kind === "detail" ? detailCommentOffset : readerCommentOffset;
-  try {
-    const rows = await fetchComments(currentComic, chapterId, offset, COMMENTS_PAGE_SIZE);
-    if (reset && rows.length === 0) {
-      box.innerHTML = '<div class="empty">No comments yet — be the first to write one.</div>';
-    } else {
-      box.insertAdjacentHTML("beforeend", rows.map(commentHtml).join(""));
-    }
-    if (kind === "detail") detailCommentOffset = offset + rows.length;
-    else readerCommentOffset = offset + rows.length;
-    if (btn && rows.length < COMMENTS_PAGE_SIZE) {
-      btn.textContent = "All comments loaded";
-      btn.disabled = true;
-      btn.style.opacity = ".55";
-    }
-  } catch {
-    if (reset) box.innerHTML = '<div class="empty">Failed to load comments.</div>';
+  if (btn) {
+    const done = rows.length === 0 || visible >= rows.length;
+    btn.textContent = done ? "All comments loaded" : "Load more comments";
+    btn.disabled = done;
+    btn.style.opacity = done ? ".55" : "";
   }
 }
+async function loadComments(kind: "reader" | "detail", reset: boolean): Promise<void> {
+  if (!reset) {
+    renderVisibleComments(kind);
+    return;
+  }
+  const containerId = kind === "detail" ? "detailComments" : "readerComments";
+  const chapterId = kind === "reader" ? currentChapterId : null;
+  if (kind === "detail") detailVisibleCount = COMMENTS_PAGE_SIZE;
+  else readerVisibleCount = COMMENTS_PAGE_SIZE;
+  $(containerId).innerHTML = commentsConfigured
+    ? '<div class="empty">Loading…</div>'
+    : '<div class="empty">Comments aren\'t set up yet.</div>';
+  if (!commentsConfigured) return;
+  try {
+    const { fetchThread } = await import("./comments");
+    commentThreads.set(threadKey(kind), await fetchThread(currentComic, chapterId));
+  } catch {
+    $(containerId).innerHTML = '<div class="empty">Failed to load comments.</div>';
+    return;
+  }
+  renderVisibleComments(kind);
+}
 function loadMoreComments(containerId: string): void {
-  loadComments(containerId === "detailComments" ? "detail" : "reader", false);
+  const kind = containerId === "detailComments" ? "detail" : "reader";
+  if (kind === "detail") detailVisibleCount += COMMENTS_PAGE_SIZE;
+  else readerVisibleCount += COMMENTS_PAGE_SIZE;
+  renderVisibleComments(kind);
 }
 function pickStar(btn: HTMLElement, n: number): void {
   const parent = btn.parentElement as HTMLElement;
@@ -629,6 +643,7 @@ async function submitComment(kind: "reader" | "detail"): Promise<void> {
     return;
   }
   try {
+    const { postComment } = await import("./comments");
     const row = await postComment({
       manga_id: currentComic,
       chapter_id: kind === "reader" ? currentChapterId : null,
@@ -636,11 +651,11 @@ async function submitComment(kind: "reader" | "detail"): Promise<void> {
       rating: Number(stars),
       body: text,
     });
-    const container = $(kind === "reader" ? "readerComments" : "detailComments");
-    container.querySelector(".empty")?.remove();
-    container.insertAdjacentHTML("afterbegin", commentHtml(row));
-    if (kind === "detail") detailCommentOffset++;
-    else readerCommentOffset++;
+    const key = threadKey(kind);
+    commentThreads.set(key, [row, ...(commentThreads.get(key) ?? [])]);
+    if (kind === "detail") detailVisibleCount++;
+    else readerVisibleCount++;
+    renderVisibleComments(kind);
     toast("Your " + (kind === "reader" ? "comment" : "review") + " was posted.");
     ($(prefix + "Name") as HTMLInputElement).value = "";
     ($(prefix + "Comment") as HTMLTextAreaElement).value = "";

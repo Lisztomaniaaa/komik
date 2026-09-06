@@ -11,13 +11,14 @@ index.html         markup halaman (semua view: home, explore, detail, reader, ac
 src/style.css       semua styling (dark theme)
 src/types.ts        tipe data (Comic, ChapterEntry, Filters, CommentRow, dll.)
 src/mangadex.ts      client API MangaDex — fetch, mapping ke tipe Comic, genre/type/status filter
-src/comments.ts       client Supabase (REST) buat komentar & review — lihat "Setup Supabase" di bawah
+src/firebase.ts       init Firebase app + Firestore instance dari env var
+src/comments.ts       fetch/post komentar & review ke Firestore — lihat "Setup Firebase" di bawah
 src/app.ts           seluruh logic aplikasi (navigasi, filter, reader, login, dsb.)
 src/uiChrome.ts       perilaku menu mobile/drawer
 src/main.ts           entry point, cuma import file-file di atas
 vite.config.ts        proxy /mdx -> api.mangadex.org, proxy /api/img -> gambar MangaDex (lihat di bawah)
 api/img.ts            versi Vercel (edge function) dari proxy gambar di atas
-supabase/schema.sql    SQL buat tabel comments — tinggal paste ke Supabase SQL Editor
+firestore.rules        security rules Firestore — tinggal paste ke Firebase Console
 ```
 
 Markup masih pakai `onclick="fn(...)"` inline seperti aslinya; fungsi-fungsi yang
@@ -81,39 +82,51 @@ di `vite.config.ts` ambil gambarnya di sisi server lalu diteruskan ke
 browser, sama seperti `/mdx` tapi untuk gambar. Karena host halaman chapter
 berubah-ubah per request, ini butuh function beneran, bukan rewrite statis.
 
-## Setup Supabase (komentar & review)
+## Setup Firebase (komentar & review)
 
 Komentar dan review sekarang disimpan permanen (bukan cuma nempel di layar
-terus ilang pas refresh) — butuh database Supabase punya sendiri. Ini
+terus ilang pas refresh) — butuh project Firebase punya sendiri. Ini
 langkah-langkahnya (gratis, ~5 menit):
 
-1. Bikin akun & project baru di [supabase.com](https://supabase.com) (bisa
-   pakai GitHub, tinggal beberapa klik).
-2. Buka project itu -> **SQL Editor** -> **New query** -> copy-paste isi
-   file `supabase/schema.sql` dari repo ini -> klik **Run**. Ini bikin
-   tabel `comments`-nya, sudah termasuk aturan keamanan dasarnya.
-3. Buka **Project Settings -> API** -> catat dua nilai ini:
-   - **Project URL** (`https://xxxxx.supabase.co`)
-   - **anon public key** (string panjang di bagian "Project API keys")
-4. Di **Vercel** (dashboard project ini) -> **Settings -> Environment
-   Variables**, tambahkan dua variabel:
-   - `VITE_SUPABASE_URL` = Project URL tadi
-   - `VITE_SUPABASE_ANON_KEY` = anon public key tadi
-5. Redeploy (push apa saja, atau klik "Redeploy" di Vercel).
+1. Buka [console.firebase.google.com](https://console.firebase.google.com)
+   -> **Add project** (bisa pakai akun Google, tinggal beberapa klik).
+2. Di project itu, buka **Build -> Firestore Database** -> **Create
+   database** -> pilih lokasi -> mulai dalam **production mode**.
+3. Masih di Firestore, buka tab **Rules** -> hapus isi default-nya -> copy
+   paste isi file `firestore.rules` dari repo ini -> **Publish**. Ini yang
+   menentukan siapa boleh baca/tulis komentar (aturan dasarnya sudah benar,
+   tidak perlu diubah).
+4. Balik ke **Project settings** (ikon gerigi) -> scroll ke **Your apps**
+   -> klik ikon web `</>` -> kasih nama apa saja -> **Register app**.
+   Firebase kasih blok kode config — catat 6 nilai di dalamnya
+   (`apiKey`, `authDomain`, `projectId`, `storageBucket`,
+   `messagingSenderId`, `appId`).
+5. Di **Vercel** (dashboard project ini) -> **Settings -> Environment
+   Variables**, tambahkan 6 variabel sesuai nama di `.env.example`
+   (`VITE_FIREBASE_API_KEY`, dst.) — isinya dari nilai step 4.
+6. Redeploy (push apa saja, atau klik "Redeploy" di Vercel).
 
 Kalau mau coba di `npm run dev` juga, copy `.env.example` jadi `.env.local`
-dan isi dua nilai yang sama di situ (file ini gitignored, aman).
+dan isi 6 nilai yang sama di situ (file ini gitignored, aman).
 
-**Tanpa dua env var itu, app tetap jalan normal** — cuma bagian komentar
+**Tanpa 6 env var itu, app tetap jalan normal** — cuma bagian komentar
 yang nampilin "Comments aren't set up yet." alih-alih error.
 
-**Catatan keamanan**: `anon key` itu memang didesain publik (ikut ke bundle
-JS, siapa saja bisa lihat) — yang benar-benar membatasi apa yang boleh
-dilakukan adalah *Row Level Security* policy di `supabase/schema.sql` (saat
-ini: siapa saja boleh baca & post komentar, tidak ada yang boleh edit/hapus
-punya orang lain). Karena belum ada login asli, tidak ada proteksi spam
-selain itu — begitu login sungguhan ada, policy insert bisa diperketat pakai
-`auth.uid()`.
+**Catatan keamanan**: config Firebase itu memang didesain publik (ikut ke
+bundle JS, siapa saja bisa lihat) — yang benar-benar membatasi apa yang
+boleh dilakukan adalah **Firestore Rules** di `firestore.rules` (saat ini:
+siapa saja boleh baca & post komentar dengan validasi dasar — nama 1-60
+karakter, rating 1-5, teks maks 2000 karakter — tidak ada yang boleh
+edit/hapus punya orang lain). Karena belum ada login asli, tidak ada
+proteksi spam selain itu — begitu login sungguhan ada, rule create bisa
+diperketat pakai `request.auth.uid`.
+
+**Kenapa bukan Supabase**: awalnya dicoba Supabase, tapi koneksi MCP-nya
+putus di tengah setup dan tidak nyambung lagi — Firebase dipilih sebagai
+gantinya. Desain query komentarnya sengaja menghindari kombinasi
+filter+`orderBy` (itu butuh composite index manual di Firestore, sudah
+dicek langsung ke dokumentasinya) — pengurutan komentar dilakukan di sisi
+JS, bukan di query, supaya nol langkah index manual di Firebase Console.
 
 ## Catatan lain
 
@@ -121,6 +134,6 @@ selain itu — begitu login sungguhan ada, policy insert bisa diperketat pakai
   belum ada versi Indonesia.
 - Login, follow, dan reading-progress masih 100% lokal (localStorage per
   browser) — belum ada backend buat itu. Komentar/review sudah live lewat
-  Supabase (lihat di atas); data komik sudah live lewat MangaDex.
+  Firebase (lihat di atas); data komik sudah live lewat MangaDex.
 - Progress baca (`panpan-progress` di localStorage) dipakai buat mengisi
   section "Continue reading" di homepage dan tab History di Account.

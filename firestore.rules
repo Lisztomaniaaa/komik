@@ -1,0 +1,30 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Comments & reviews. No real login yet (see README), so everyone
+    // shares the same public Firebase config — these rules are what
+    // actually decide what's allowed, not secrecy of that config.
+    match /comments/{commentId} {
+      allow read: if true;
+
+      allow create: if request.resource.data.name is string
+                    && request.resource.data.name.size() > 0
+                    && request.resource.data.name.size() <= 60
+                    && request.resource.data.body is string
+                    && request.resource.data.body.size() > 0
+                    && request.resource.data.body.size() <= 2000
+                    && request.resource.data.rating is int
+                    && request.resource.data.rating >= 1
+                    && request.resource.data.rating <= 5
+                    && request.resource.data.manga_id is string
+                    && request.resource.data.thread_id is string
+                    && (request.resource.data.chapter_id == null || request.resource.data.chapter_id is string);
+
+      // Nobody can edit or delete anyone's comment — including their own —
+      // since there's no real user identity yet to scope that to. Once
+      // real accounts exist, insert can be scoped to request.auth.uid and
+      // an update/delete-your-own rule added.
+      allow update, delete: if false;
+    }
+  }
+}
