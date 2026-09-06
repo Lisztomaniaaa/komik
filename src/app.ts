@@ -16,8 +16,6 @@ import type {
   CommentRow,
   FilterKey,
   Filters,
-  ReaderBackground,
-  ReaderMode,
   ReadingProgressEntry,
   SortMode,
 } from "./types";
@@ -161,32 +159,9 @@ function clearHomeSearch(): void {
   i.focus();
 }
 
-async function renderSearchResults(): Promise<void> {
-  const box = $("searchResults");
-  const q = (($("search") as HTMLInputElement).value || "").trim();
-  if (!q) {
-    box.style.display = "none";
-    box.innerHTML = "";
-    return;
-  }
-  const list = await quickSearch(q);
-  box.innerHTML =
-    list
-      .map(
-        (c) =>
-          `<div class="searchResult" onclick="openComic('${c.id}');hideSearchResults()"><div class="miniCover">${c.cover ? `<img src="${c.cover}" alt="">` : ""}</div><div><strong>${c.title}</strong><small>${c.type} · ${c.status} · ★ ${c.rating}</small></div></div>`,
-      )
-      .join("") || '<div class="searchEmpty">No comics found.</div>';
-  box.style.display = "block";
-}
-function hideSearchResults(): void {
-  $("searchResults").style.display = "none";
-}
-
 let exploreRequestId = 0;
 async function renderExplore(): Promise<void> {
   const grid = $("exploreGrid");
-  const q = (($("search") as HTMLInputElement).value || "").trim();
   const requestId = ++exploreRequestId;
   grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Loading…</div>';
   try {
@@ -197,7 +172,6 @@ async function renderExplore(): Promise<void> {
       type: filters.type,
       genre: filters.genre,
       status: filters.status,
-      title: q || undefined,
     });
     if (requestId !== exploreRequestId) return;
     const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -469,7 +443,6 @@ async function openReader(chapterId: string, id: string = currentComic): Promise
   const hash = "#read-" + id + "::" + chapterId;
   if (enteringReader) history.pushState({ view: "reader", id, chapterId }, "", hash);
   else history.replaceState({ view: "reader", id, chapterId }, "", hash);
-  updateFullscreenButton();
 
   try {
     const [c, chapters, pages] = await Promise.all([
@@ -794,32 +767,9 @@ async function accountTab(tab: AccountTab): Promise<void> {
   if (tab === "notifications")
     p.innerHTML = `<div class="eyebrow">Notifications</div><h2>Stay updated.</h2><p>New chapters from followed titles appear here.</p><div class="accountList"><div class="empty">This is a demo — notifications are not tracked live.</div></div>`;
   if (tab === "settings")
-    p.innerHTML = `<div class="eyebrow">Preferences</div><h2>Settings.</h2><p>Reader, appearance and notification preferences.</p><div class="setting"><div><strong>Auto next chapter</strong><small>Open the next chapter after finishing a reader page.</small></div><button class="toggle on" onclick="this.classList.toggle('on')"></button></div><div class="setting"><div><strong>Chapter notifications</strong><small>Notify me when followed comics update.</small></div><button class="toggle on" onclick="this.classList.toggle('on')"></button></div><div class="setting"><div><strong>Reduce animations</strong><small>Use simpler transitions on mobile.</small></div><button class="toggle" onclick="this.classList.toggle('on')"></button></div><div class="setting"><div><strong>Theme</strong><small>Switch between dark and light mode.</small></div><button class="secondary" onclick="toggleTheme()">Toggle theme</button></div><div class="setting"><div><strong>Reader preferences</strong><small>Open reader settings to customize page display.</small></div><button class="secondary" onclick="openCurrentReader()">Open reader</button></div>`;
+    p.innerHTML = `<div class="eyebrow">Preferences</div><h2>Settings.</h2><p>Reader, appearance and notification preferences.</p><div class="setting"><div><strong>Auto next chapter</strong><small>Open the next chapter after finishing a reader page.</small></div><button class="toggle on" onclick="this.classList.toggle('on')"></button></div><div class="setting"><div><strong>Chapter notifications</strong><small>Notify me when followed comics update.</small></div><button class="toggle on" onclick="this.classList.toggle('on')"></button></div><div class="setting"><div><strong>Reduce animations</strong><small>Use simpler transitions on mobile.</small></div><button class="toggle" onclick="this.classList.toggle('on')"></button></div><div class="setting"><div><strong>Theme</strong><small>Switch between dark and light mode.</small></div><button class="secondary" onclick="toggleTheme()">Toggle theme</button></div><div class="setting"><div><strong>Continue reading</strong><small>Jump back into the last chapter you opened.</small></div><button class="secondary" onclick="openCurrentReader()">Open reader</button></div>`;
   if (tab === "security")
     p.innerHTML = `<div class="eyebrow">Security</div><h2>Account security.</h2><p>Manage how you're signed in.</p><div class="setting"><div><strong>Connected login</strong><small>Email &amp; password</small></div><span style="color:var(--red);font-weight:850">CONNECTED</span></div><div class="setting"><div><strong>Sign out</strong><small>End your session on this device.</small></div><button class="secondary" onclick="logout()">Sign out</button></div>`;
-}
-function toggleReaderSettings(): void {
-  $("readerSettings").classList.toggle("open");
-}
-function setReaderMode(mode: ReaderMode): void {
-  $("readerView")
-    .querySelectorAll<HTMLElement>(".comicPage")
-    .forEach((page) => {
-      page.style.maxWidth = mode === "single" ? "720px" : "100%";
-    });
-  const select = document.getElementById("readerMode") as HTMLSelectElement | null;
-  if (select) select.value = mode;
-  localStorage.setItem("panpan-reader-mode", mode);
-  toast("Reader mode: " + mode);
-}
-function setReaderBackground(mode: ReaderBackground): void {
-  const page = $("readerView").querySelector<HTMLElement>(".page");
-  if (!page) return;
-  page.style.background = mode === "white" ? "#fff" : mode === "dark" ? "#17181a" : "#050505";
-  localStorage.setItem("panpan-reader-bg", mode);
-}
-function setReaderBrightness(v: string): void {
-  $("readerView").style.filter = `brightness(${Number(v) / 100})`;
 }
 function saveReadingProgress(): void {
   if (!$("readerView").classList.contains("active") || !currentChapterId) return;
@@ -844,28 +794,6 @@ function loadTheme(): void {
   const saved = localStorage.getItem("panpan-theme");
   if (saved === "light") document.body.classList.add("light");
 }
-function updateFullscreenButton(): void {
-  const b = document.getElementById("readerFullscreenBtn");
-  if (!b) return;
-  const active = !!document.fullscreenElement;
-  b.innerHTML = active
-    ? '<svg class="svgIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3v5H3M16 3v5h5M21 16h-5v5M3 16h5v5"></path></svg><span>Exit fullscreen</span>'
-    : '<svg class="svgIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M21 16v5h-5M3 16v5h5"></path></svg><span>Fullscreen</span>';
-}
-async function toggleReaderFullscreen(): Promise<void> {
-  try {
-    if (document.fullscreenElement) await document.exitFullscreen();
-    else if (document.documentElement.requestFullscreen)
-      await document.documentElement.requestFullscreen({ navigationUI: "hide" });
-  } catch {
-    toast("Fullscreen is not available in this browser.");
-  }
-  updateFullscreenButton();
-}
-function leaveReaderFullscreen(): void {
-  if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
-}
-document.addEventListener("fullscreenchange", updateFullscreenButton);
 function toggleMobileMenu(): void {
   const d = $("mobileDrawer");
   const b = $("mobileMenuBtn");
@@ -897,25 +825,8 @@ document.addEventListener(
   true,
 );
 
-const debouncedExplore = debounce(() => renderExplore(), 300);
 const debouncedHomeSearch = debounce(() => renderHomeSearchResults(), 300);
-const debouncedSearch = debounce(() => renderSearchResults(), 300);
 
-const searchInput = $("search") as HTMLInputElement;
-searchInput.addEventListener("input", () => {
-  debouncedSearch();
-  if ($("exploreView").classList.contains("active")) debouncedExplore();
-});
-document.addEventListener("click", (e) => {
-  if (!(e.target as HTMLElement).closest(".searchWrap")) hideSearchResults();
-});
-searchInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
-    const first = $("searchResults").querySelector<HTMLElement>(".searchResult");
-    if (first) first.click();
-    else showExplore();
-  }
-});
 const homeSearch = document.getElementById("homeSearch") as HTMLInputElement | null;
 if (homeSearch) {
   homeSearch.addEventListener("input", debouncedHomeSearch);
@@ -992,12 +903,6 @@ Object.assign(window, {
   submitComment,
   openAccount,
   accountTab,
-  toggleReaderSettings,
-  setReaderMode,
-  setReaderBackground,
-  setReaderBrightness,
-  toggleReaderFullscreen,
-  leaveReaderFullscreen,
   toggleMobileMenu,
   closeMobileMenu,
   toggleTheme,
@@ -1011,7 +916,6 @@ Object.assign(window, {
   setExplorePage,
   setHomeGenrePage,
   hideHomeSearchResults,
-  hideSearchResults,
   clearHomeSearch,
   openCurrentReader,
   startReading,
