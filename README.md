@@ -1,6 +1,6 @@
 # komik
 
-Panpan Comics — comic reader frontend, data komik real dari MangaDex API.
+KomikVibe — comic reader frontend, data komik real dari MangaDex API.
 
 ## Stack
 

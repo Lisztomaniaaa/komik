@@ -3,13 +3,31 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="KomikVibe — discover manga, manhwa and webcomics in one clean reading experience.">
+<meta name="theme-color" content="#e53935">
+
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
 <link rel="icon" href="/favicon.ico">
-<title>Panpan Comics — Demo</title>
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="KomikVibe">
+<meta property="og:title" content="KomikVibe — Read manga, manhwa & webcomics">
+<meta property="og:description" content="Discover manga, manhwa and webcomics in one clean reading experience.">
+<meta property="og:image" content="/og-image.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="KomikVibe — Read manga, manhwa & webcomics">
+<meta name="twitter:description" content="Discover manga, manhwa and webcomics in one clean reading experience.">
+<meta name="twitter:image" content="/og-image.jpg">
+
+<title>KomikVibe</title>
 </head>
 <body>
 <header class="topbar">
 <div class="container nav">
-<a class="logo" href="#" onclick="goHome();return false">PANPAN<small>COMICS</small></a>
+<a class="logo" href="#" onclick="goHome();return false"><img src="/logo-mark.png" alt="" class="logoMark">Komik<b>Vibe</b></a>
 <nav class="navlinks">
 <a id="navHome" class="active" href="#" onclick="goHome();return false">Home</a>
 <a id="navExplore" href="#" onclick="showExplore();return false">Explore</a>
@@ -25,7 +43,7 @@
 </div>
 </header>
 <div id="mobileDrawer" class="mobileDrawer" aria-hidden="true">
-<div class="drawerTitle"><span>MENU</span><small>Panpan Comics</small></div>
+<div class="drawerTitle"><span>MENU</span><small>KomikVibe</small></div>
 <a href="#" onclick="goHome();closeMobileMenu();return false"><svg class="drawerIcon svgIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg><span class="drawerLabel">Home</span></a>
 <a href="#" onclick="showExplore();closeMobileMenu();return false"><svg class="drawerIcon svgIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg><span class="drawerLabel">Explore</span></a>
 <a href="#" onclick="goHome();closeMobileMenu();setTimeout(()=>document.getElementById('latest').scrollIntoView({behavior:'smooth'}),30);return false"><svg class="drawerIcon svgIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"></path></svg><span class="drawerLabel">Latest</span></a>
@@ -120,10 +138,10 @@
 <section id="faqView" class="view">
 <div class="infoPage">
 <button class="back" onclick="goHome()"><svg class="svgIcon" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"></path></svg><span>Back</span> to home</button>
-<div class="exploreHead infoHero"><div class="eyebrow">Help center</div><h1>Frequently asked questions.</h1><p style="color:#888">Quick answers about reading, accounts, comments and the Panpan Comics demo.</p></div>
+<div class="exploreHead infoHero"><div class="eyebrow">Help center</div><h1>Frequently asked questions.</h1><p style="color:#888">Quick answers about reading, accounts, comments and the KomikVibe demo.</p></div>
 <div class="infoGrid">
 <article class="infoCard">
-<div class="faqItem"><h3>Is Panpan Comics a real service?</h3><p>This prototype is a frontend demo. Accounts, comments, reading progress and other interactions are simulated locally.</p></div>
+<div class="faqItem"><h3>Is KomikVibe a real service?</h3><p>This prototype is a frontend demo. Accounts, comments, reading progress and other interactions are simulated locally.</p></div>
 <div class="faqItem"><h3>How do I start reading?</h3><p>Open a comic, choose a chapter, then use the reader controls to adjust the display mode or enter fullscreen.</p></div>
 <div class="faqItem"><h3>Can I comment without logging in?</h3><p>No. You must log in before posting a comment or rating.</p></div>
 <div class="faqItem"><h3>How does login work?</h3><p>Google and email login are demo providers in this prototype. No real authentication is performed.</p></div>
@@ -141,9 +159,9 @@
 <section id="aboutView" class="view">
 <div class="infoPage">
 <button class="back" onclick="goHome()"><svg class="svgIcon" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"></path></svg><span>Back</span> to home</button>
-<div class="exploreHead infoHero"><div class="eyebrow">About Panpan Comics</div><h1>Stories, without the clutter.</h1><p style="color:#888">A clean reading experience for manga, manhwa, manhua and webcomics.</p></div>
+<div class="exploreHead infoHero"><div class="eyebrow">About KomikVibe</div><h1>Stories, without the clutter.</h1><p style="color:#888">A clean reading experience for manga, manhwa, manhua and webcomics.</p></div>
 <div class="infoGrid">
-<article class="infoCard"><h2>What we're building</h2><p>Panpan Comics is designed around simple discovery, fast chapter access, personal libraries and a comfortable mobile reader.</p></article>
+<article class="infoCard"><h2>What we're building</h2><p>KomikVibe is designed around simple discovery, fast chapter access, personal libraries and a comfortable mobile reader.</p></article>
 <article class="infoCard"><h2>Reader first</h2><p>The interface keeps the important actions close: choose a chapter, adjust reader settings, follow a title and continue where you left off.</p></article>
 <article class="infoCard"><h2>Community</h2><p>Comments and ratings help readers discover stories while keeping discussion useful, respectful and spoiler-aware.</p></article>
 <article class="infoCard"><h2>Demo notice</h2><p>This version is a UI/UX prototype. Content, accounts, ratings, comments, reading history and other data may be simulated locally.</p></article>
@@ -154,9 +172,9 @@
 <section id="legalView" class="view">
 <div class="legalPage">
 <button class="back" onclick="goHome()"><svg class="svgIcon" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"></path></svg><span>Back</span> to home</button>
-<div class="exploreHead"><div class="eyebrow">Information</div><h1 id="legalTitle">Terms of Use.</h1><p id="legalLead">Simple, clear policies for the Panpan Comics demo.</p></div>
+<div class="exploreHead"><div class="eyebrow">Information</div><h1 id="legalTitle">Terms of Use.</h1><p id="legalLead">Simple, clear policies for the KomikVibe demo.</p></div>
 <div class="legalGrid">
-<article class="legalCard" id="legalTerms"><h2>Terms of Use</h2><p>By using Panpan Comics, you agree to use the service lawfully and respectfully. This prototype contains demo content and simulated account features.</p><ul><li>Do not use the service to distribute unlawful material.</li><li>Do not abuse comments, ratings, accounts or automated systems.</li><li>Demo purchases, accounts and reader data are not real transactions.</li></ul></article>
+<article class="legalCard" id="legalTerms"><h2>Terms of Use</h2><p>By using KomikVibe, you agree to use the service lawfully and respectfully. This prototype contains demo content and simulated account features.</p><ul><li>Do not use the service to distribute unlawful material.</li><li>Do not abuse comments, ratings, accounts or automated systems.</li><li>Demo purchases, accounts and reader data are not real transactions.</li></ul></article>
 <article class="legalCard" id="legalPrivacy"><h2>Privacy Policy</h2><p>This demo does not perform real authentication or payment processing. A production version should clearly disclose what account, device, analytics and reading-history data it collects.</p><ul><li>Collect only data that is necessary.</li><li>Provide account deletion and data export where applicable.</li><li>Explain cookies, analytics and third-party services.</li></ul></article>
 <article class="legalCard" id="legalCopyright"><h2>Copyright & DMCA</h2><p>Production deployment should provide a copyright complaint process, rights-holder contact and a clear takedown workflow. Only publish content you have the rights or licenses to distribute.</p><button class="secondary" onclick="toast('Demo copyright report form opened.')">Report copyright issue</button></article>
 <article class="legalCard" id="legalCommunity"><h2>Community Guidelines</h2><p>Keep comments useful and respectful. No harassment, spam, scams, impersonation, doxxing or illegal content.</p><ul><li>Rate honestly.</li><li>Discuss chapters without posting unrelated spam.</li><li>Use spoiler tags where available.</li></ul></article>
@@ -167,7 +185,7 @@
 </section>
 
 <footer><div class="container">
-<div class="footerTop"><div><strong class="footerLogo">PANPAN COMICS</strong><p>Read. Discover. Follow your next story.</p></div>
+<div class="footerTop"><div><strong class="footerLogo">Komik<span>Vibe</span></strong><p>Read. Discover. Follow your next story.</p></div>
 <div class="footerLinks">
 <a href="#" onclick="openLegal('Terms of Use');return false">Terms</a>
 <a href="#" onclick="openLegal('Privacy Policy');return false">Privacy</a>
@@ -178,7 +196,7 @@
 <a href="#" onclick="openFAQ();return false">FAQ</a>
 <a href="#" onclick="openAbout();return false">About</a>
 </div></div>
-<div class="footerBottom">© 2026 Panpan Comics · Frontend demo. Accounts, comments, library and reading progress are simulated locally. <span id="buildVersion"></span></div>
+<div class="footerBottom">© 2026 KomikVibe · Frontend demo. Accounts, comments, library and reading progress are simulated locally. <span id="buildVersion"></span></div>
 </div></footer>
 
 <div class="modal" id="loginModal"><div class="modalBox">
