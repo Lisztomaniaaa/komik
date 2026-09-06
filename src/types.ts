@@ -47,3 +47,13 @@ export interface ReadingProgressEntry {
   percent: number;
   updated: number;
 }
+
+export interface CommentRow {
+  id: string;
+  manga_id: string;
+  chapter_id: string | null;
+  name: string;
+  rating: number;
+  body: string;
+  created_at: string;
+}

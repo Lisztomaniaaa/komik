@@ -1,3 +1,4 @@
+import { commentsConfigured, fetchComments, postComment } from "./comments";
 import {
   fetchChapterPages,
   fetchChapters,
@@ -11,6 +12,7 @@ import type {
   AccountTab,
   ChapterEntry,
   Comic,
+  CommentRow,
   FilterKey,
   Filters,
   ReaderBackground,
@@ -40,6 +42,9 @@ let explorePage = 1;
 let homeGenrePage = 1;
 let homeGenreCurrent = "All";
 const PAGE_SIZE = 10;
+const COMMENTS_PAGE_SIZE = 10;
+let detailCommentOffset = 0;
+let readerCommentOffset = 0;
 
 // Comic detail and chapter-list lookups hit the network, so cache them for
 // the lifetime of the page (re-opening a comic or paging prev/next chapter
@@ -413,6 +418,7 @@ async function openComic(id: string): Promise<void> {
     $("detailCover").dataset.title = c.title;
     $("followBtn").textContent = followed.has(id) ? "Following" : "Follow";
     buildChapters(chapters, id);
+    loadComments("detail", true);
   } catch {
     if (requestId !== openComicRequestId) return;
     $("detailTitle").textContent = "Failed to load this comic.";
@@ -481,6 +487,7 @@ async function openReader(chapterId: string, id: string = currentComic): Promise
     );
     const pct = saved[id + "::" + chapterId]?.percent || 0;
     $("readerProgressBar").style.width = pct + "%";
+    loadComments("reader", true);
   } catch {
     if (requestId !== openReaderRequestId) return;
     $("readerTitle").textContent = "Failed to load this chapter.";
@@ -555,21 +562,64 @@ function requireLogin(): boolean {
 function closeRequiredLogin(): void {
   $("loginRequired").classList.remove("open");
 }
-function loadMoreComments(containerId: string, btn: HTMLButtonElement): void {
-  const box = document.getElementById(containerId);
-  if (!box) return;
-  box.querySelectorAll<HTMLElement>(".extraComment[hidden]").forEach((el) => (el.hidden = false));
-  btn.textContent = "All comments loaded";
-  btn.disabled = true;
-  btn.style.opacity = ".55";
+function commentHtml(row: CommentRow): string {
+  const when = new Date(row.created_at).toLocaleDateString();
+  return `<div class="comment"><div class="stars">${"★".repeat(row.rating)}${"☆".repeat(5 - row.rating)}</div><p>${escapeHtml(row.body)}</p><b>${escapeHtml(row.name)}</b><small>${when}</small></div>`;
+}
+function commentLoadMoreBtn(containerId: string): HTMLButtonElement | null {
+  return document
+    .getElementById(containerId)
+    ?.parentElement?.querySelector<HTMLButtonElement>(".loadMoreBtn") ?? null;
+}
+async function loadComments(kind: "reader" | "detail", reset: boolean): Promise<void> {
+  const containerId = kind === "detail" ? "detailComments" : "readerComments";
+  const chapterId = kind === "reader" ? currentChapterId : null;
+  const box = $(containerId);
+  const btn = commentLoadMoreBtn(containerId);
+  if (reset) {
+    if (kind === "detail") detailCommentOffset = 0;
+    else readerCommentOffset = 0;
+    box.innerHTML = commentsConfigured ? "" : '<div class="empty">Comments aren\'t set up yet.</div>';
+    if (btn) {
+      btn.textContent = "Load more comments";
+      btn.disabled = false;
+      btn.style.opacity = "";
+    }
+  }
+  if (!commentsConfigured) return;
+  const offset = kind === "detail" ? detailCommentOffset : readerCommentOffset;
+  try {
+    const rows = await fetchComments(currentComic, chapterId, offset, COMMENTS_PAGE_SIZE);
+    if (reset && rows.length === 0) {
+      box.innerHTML = '<div class="empty">No comments yet — be the first to write one.</div>';
+    } else {
+      box.insertAdjacentHTML("beforeend", rows.map(commentHtml).join(""));
+    }
+    if (kind === "detail") detailCommentOffset = offset + rows.length;
+    else readerCommentOffset = offset + rows.length;
+    if (btn && rows.length < COMMENTS_PAGE_SIZE) {
+      btn.textContent = "All comments loaded";
+      btn.disabled = true;
+      btn.style.opacity = ".55";
+    }
+  } catch {
+    if (reset) box.innerHTML = '<div class="empty">Failed to load comments.</div>';
+  }
+}
+function loadMoreComments(containerId: string): void {
+  loadComments(containerId === "detailComments" ? "detail" : "reader", false);
 }
 function pickStar(btn: HTMLElement, n: number): void {
   const parent = btn.parentElement as HTMLElement;
   [...parent.children].forEach((b, i) => b.classList.toggle("on", i < n));
   parent.dataset.rating = String(n);
 }
-function submitComment(kind: "reader" | "detail"): void {
+async function submitComment(kind: "reader" | "detail"): Promise<void> {
   if (!requireLogin()) return;
+  if (!commentsConfigured) {
+    toast("Comments aren't set up yet.");
+    return;
+  }
   const prefix = kind === "reader" ? "reader" : "detail";
   const name = ($(prefix + "Name") as HTMLInputElement).value.trim();
   const text = ($(prefix + "Comment") as HTMLTextAreaElement).value.trim();
@@ -578,18 +628,29 @@ function submitComment(kind: "reader" | "detail"): void {
     toast("Please choose a rating, name and comment.");
     return;
   }
-  const target = $(kind === "reader" ? "readerComments" : "detailComments");
-  const card = document.createElement("div");
-  card.className = "comment";
-  card.innerHTML = `<div class="stars">${"★".repeat(Number(stars))}${"☆".repeat(5 - Number(stars))}</div><p>${escapeHtml(text)}</p><b>${escapeHtml(name)}</b><small>Just now · Demo account</small>`;
-  target.prepend(card);
-  toast("Your " + (kind === "reader" ? "comment" : "review") + " was posted.");
-  ($(prefix + "Name") as HTMLInputElement).value = "";
-  ($(prefix + "Comment") as HTMLTextAreaElement).value = "";
-  $(prefix + "Stars").dataset.rating = "";
-  $(prefix + "Stars")
-    .querySelectorAll("button")
-    .forEach((b) => b.classList.remove("on"));
+  try {
+    const row = await postComment({
+      manga_id: currentComic,
+      chapter_id: kind === "reader" ? currentChapterId : null,
+      name,
+      rating: Number(stars),
+      body: text,
+    });
+    const container = $(kind === "reader" ? "readerComments" : "detailComments");
+    container.querySelector(".empty")?.remove();
+    container.insertAdjacentHTML("afterbegin", commentHtml(row));
+    if (kind === "detail") detailCommentOffset++;
+    else readerCommentOffset++;
+    toast("Your " + (kind === "reader" ? "comment" : "review") + " was posted.");
+    ($(prefix + "Name") as HTMLInputElement).value = "";
+    ($(prefix + "Comment") as HTMLTextAreaElement).value = "";
+    $(prefix + "Stars").dataset.rating = "";
+    $(prefix + "Stars")
+      .querySelectorAll("button")
+      .forEach((b) => b.classList.remove("on"));
+  } catch {
+    toast("Failed to post — please try again.");
+  }
 }
 function escapeHtml(v: string): string {
   return v.replace(
