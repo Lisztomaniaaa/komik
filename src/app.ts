@@ -1,6 +1,16 @@
-import { comics } from "./data";
+import {
+  fetchChapterPages,
+  fetchChapters,
+  fetchLatestUpdates,
+  fetchList,
+  fetchMangaDetail,
+  fetchPopular,
+  quickSearch,
+} from "./mangadex";
 import type {
   AccountTab,
+  ChapterEntry,
+  Comic,
   FilterKey,
   Filters,
   ReaderBackground,
@@ -16,16 +26,35 @@ function $(id: string): HTMLElement {
   return document.getElementById(id) as HTMLElement;
 }
 
+// Solo Leveling — used only to seed the demo's "already following one
+// title" starting state with a manga id that actually exists on MangaDex.
+const SEED_FOLLOWED_ID = "32d76d19-8a05-4db0-9fc2-e0b0648fe9d0";
+
 let filters: Filters = { type: "All", genre: "All", status: "All" };
-let currentComic = "solo";
-let currentChapter = 200;
+let currentComic = "";
+let currentChapterId: string | null = null;
 let loggedIn = false;
-const followed = new Set<string>(["solo"]);
+const followed = new Set<string>([SEED_FOLLOWED_ID]);
 let sortMode: SortMode = "latest";
 let explorePage = 1;
 let homeGenrePage = 1;
 let homeGenreCurrent = "All";
 const PAGE_SIZE = 10;
+
+// Comic detail and chapter-list lookups hit the network, so cache them for
+// the lifetime of the page (re-opening a comic or paging prev/next chapter
+// shouldn't refetch what we already have).
+const mangaCache = new Map<string, Comic>();
+const chaptersCache = new Map<string, ChapterEntry[]>();
+let trendingTop: Comic | null = null;
+
+function debounce<A extends unknown[]>(fn: (...args: A) => void, ms: number): (...args: A) => void {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return (...args: A) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), ms);
+  };
+}
 
 function hideViews(): void {
   document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
@@ -64,34 +93,45 @@ function setNav(which: "home" | "explore" | ""): void {
   $("navHome").classList.toggle("active", which === "home");
   $("navExplore").classList.toggle("active", which === "explore");
 }
-function comicBy(id: string) {
-  return comics.find((c) => c.id === id) || comics[0];
+async function comicBy(id: string): Promise<Comic> {
+  const cached = mangaCache.get(id);
+  if (cached) return cached;
+  const comic = await fetchMangaDetail(id);
+  mangaCache.set(id, comic);
+  return comic;
+}
+async function getChaptersFor(mangaId: string): Promise<ChapterEntry[]> {
+  const cached = chaptersCache.get(mangaId);
+  if (cached) return cached;
+  const list = await fetchChapters(mangaId);
+  chaptersCache.set(mangaId, list);
+  return list;
 }
 
-function renderHomeSearchResults(): void {
+function cardHtml(c: Comic, rank?: number): string {
+  const cover = c.cover
+    ? `<img src="${c.cover}" alt="" loading="lazy">`
+    : `<div class="coverText">${c.title.replaceAll(" ", "<br>")}</div>`;
+  return `<div class="card" onclick="openComic('${c.id}')"><div class="cover">${rank ? `<span class="rank">#${rank}</span>` : `<span class="rank">${c.type}</span>`}${cover}</div><div class="title">${c.title}</div><div class="meta">${c.type} · ${c.status} · <span class="star">★ ${c.rating}</span></div></div>`;
+}
+
+async function renderHomeSearchResults(): Promise<void> {
   const input = document.getElementById("homeSearch") as HTMLInputElement | null;
   const box = document.getElementById("homeSearchResults");
   if (!input || !box) return;
-  const q = (input.value || "").toLowerCase().trim();
+  const q = (input.value || "").trim();
   ($("homeSearchClear") as HTMLElement).hidden = !q;
   if (!q) {
     box.style.display = "none";
     box.innerHTML = "";
     return;
   }
-  const list = comics
-    .filter(
-      (c) =>
-        c.title.toLowerCase().includes(q) ||
-        c.genres.some((g) => g.toLowerCase().includes(q)) ||
-        c.type.toLowerCase().includes(q),
-    )
-    .slice(0, 8);
+  const list = await quickSearch(q);
   box.innerHTML =
     list
       .map(
         (c) =>
-          `<div class="homeSearchResult" onclick="openComic('${c.id}');hideHomeSearchResults()"><div class="miniCover"></div><div><strong>${c.title}</strong><small>${c.type} · ${c.status} · ★ ${c.rating}</small></div></div>`,
+          `<div class="homeSearchResult" onclick="openComic('${c.id}');hideHomeSearchResults()"><div class="miniCover">${c.cover ? `<img src="${c.cover}" alt="">` : ""}</div><div><strong>${c.title}</strong><small>${c.type} · ${c.status} · ★ ${c.rating}</small></div></div>`,
       )
       .join("") || '<div class="homeSearchEmpty">No comics found.</div>';
   box.style.display = "block";
@@ -109,27 +149,20 @@ function clearHomeSearch(): void {
   i.focus();
 }
 
-function renderSearchResults(): void {
+async function renderSearchResults(): Promise<void> {
   const box = $("searchResults");
-  const q = ((($("search") as HTMLInputElement).value || "") as string).toLowerCase().trim();
+  const q = (($("search") as HTMLInputElement).value || "").trim();
   if (!q) {
     box.style.display = "none";
     box.innerHTML = "";
     return;
   }
-  const list = comics
-    .filter(
-      (c) =>
-        c.title.toLowerCase().includes(q) ||
-        c.genres.some((g) => g.toLowerCase().includes(q)) ||
-        c.type.toLowerCase().includes(q),
-    )
-    .slice(0, 8);
+  const list = await quickSearch(q);
   box.innerHTML =
     list
       .map(
         (c) =>
-          `<div class="searchResult" onclick="openComic('${c.id}');hideSearchResults()"><div class="miniCover"></div><div><strong>${c.title}</strong><small>${c.type} · ${c.status} · ★ ${c.rating}</small></div></div>`,
+          `<div class="searchResult" onclick="openComic('${c.id}');hideSearchResults()"><div class="miniCover">${c.cover ? `<img src="${c.cover}" alt="">` : ""}</div><div><strong>${c.title}</strong><small>${c.type} · ${c.status} · ★ ${c.rating}</small></div></div>`,
       )
       .join("") || '<div class="searchEmpty">No comics found.</div>';
   box.style.display = "block";
@@ -137,49 +170,59 @@ function renderSearchResults(): void {
 function hideSearchResults(): void {
   $("searchResults").style.display = "none";
 }
-function renderExplore(): void {
+
+let exploreRequestId = 0;
+async function renderExplore(): Promise<void> {
   const grid = $("exploreGrid");
-  let list = comics.filter(
-    (c) =>
-      (filters.type === "All" || c.type === filters.type) &&
-      (filters.genre === "All" || c.genres.includes(filters.genre)) &&
-      (filters.status === "All" || c.status === filters.status),
-  );
-  const q = (($("search") as HTMLInputElement).value || "").toLowerCase().trim();
-  if (q)
-    list = list.filter(
-      (c) => c.title.toLowerCase().includes(q) || c.genres.some((g) => g.toLowerCase().includes(q)),
-    );
-  if (sortMode === "rating") list.sort((a, b) => b.rating - a.rating);
-  if (sortMode === "az") list.sort((a, b) => a.title.localeCompare(b.title));
-  if (sortMode === "latest") list.sort((a, b) => b.chapters - a.chapters);
-  const pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
-  explorePage = Math.min(Math.max(1, explorePage), pages);
-  const slice = list.slice((explorePage - 1) * PAGE_SIZE, explorePage * PAGE_SIZE);
-  grid.innerHTML =
-    slice
-      .map(
-        (c, i) =>
-          `<div class="card" onclick="openComic('${c.id}')"><div class="cover ${i % 5 === 1 ? "c2" : i % 5 === 2 ? "c3" : i % 5 === 3 ? "c4" : "c5"}"><span class="rank">${c.type}</span><div class="coverText">${c.title.replaceAll(" ", "<br>")}</div></div><div class="title">${c.title}</div><div class="meta">${c.type} · ${c.status} · <span class="star">★ ${c.rating}</span></div></div>`,
-      )
-      .join("") || '<div class="empty" style="grid-column:1/-1">No comics match these filters.</div>';
-  renderPagination("explorePagination", explorePage, pages, "setExplorePage", list.length);
+  const q = (($("search") as HTMLInputElement).value || "").trim();
+  const requestId = ++exploreRequestId;
+  grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Loading…</div>';
+  try {
+    const { comics, total } = await fetchList({
+      offset: (explorePage - 1) * PAGE_SIZE,
+      limit: PAGE_SIZE,
+      sort: sortMode,
+      type: filters.type,
+      genre: filters.genre,
+      status: filters.status,
+      title: q || undefined,
+    });
+    if (requestId !== exploreRequestId) return;
+    const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    explorePage = Math.min(Math.max(1, explorePage), pages);
+    grid.innerHTML =
+      comics.map((c) => cardHtml(c)).join("") ||
+      '<div class="empty" style="grid-column:1/-1">No comics match these filters.</div>';
+    renderPagination("explorePagination", explorePage, pages, "setExplorePage", total);
+  } catch {
+    if (requestId !== exploreRequestId) return;
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Failed to load comics from MangaDex.</div>';
+  }
 }
-function renderHomeGenre(genre = "All"): void {
+let homeGenreRequestId = 0;
+async function renderHomeGenre(genre = "All"): Promise<void> {
   const grid = $("genreResults");
   homeGenreCurrent = genre;
-  const list = comics.filter((c) => genre === "All" || c.genres.includes(genre));
-  const pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
-  homeGenrePage = Math.min(Math.max(1, homeGenrePage), pages);
-  const slice = list.slice((homeGenrePage - 1) * PAGE_SIZE, homeGenrePage * PAGE_SIZE);
-  grid.innerHTML =
-    slice
-      .map(
-        (c, i) =>
-          `<div class="card" onclick="openComic('${c.id}')"><div class="cover ${i % 5 === 1 ? "c2" : i % 5 === 2 ? "c3" : i % 5 === 3 ? "c4" : "c5"}"><span class="rank">${c.type}</span><div class="coverText">${c.title.replaceAll(" ", "<br>")}</div></div><div class="title">${c.title}</div><div class="meta">${c.type} · <span class="star">★ ${c.rating}</span></div></div>`,
-      )
-      .join("") || '<div class="empty" style="grid-column:1/-1">No comics in this genre yet.</div>';
-  renderPagination("genrePagination", homeGenrePage, pages, "setHomeGenrePage", list.length);
+  const requestId = ++homeGenreRequestId;
+  grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Loading…</div>';
+  try {
+    const { comics, total } = await fetchList({
+      offset: (homeGenrePage - 1) * PAGE_SIZE,
+      limit: PAGE_SIZE,
+      sort: "latest",
+      genre,
+    });
+    if (requestId !== homeGenreRequestId) return;
+    const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    homeGenrePage = Math.min(Math.max(1, homeGenrePage), pages);
+    grid.innerHTML =
+      comics.map((c) => cardHtml(c)).join("") ||
+      '<div class="empty" style="grid-column:1/-1">No comics in this genre yet.</div>';
+    renderPagination("genrePagination", homeGenrePage, pages, "setHomeGenrePage", total);
+  } catch {
+    if (requestId !== homeGenreRequestId) return;
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Failed to load comics from MangaDex.</div>';
+  }
 }
 function setHomeGenre(genre: string, btn: HTMLElement): void {
   document.querySelectorAll("#genres .genre").forEach((b) => b.classList.remove("active"));
@@ -222,6 +265,56 @@ function setHomeGenrePage(page: number): void {
   homeGenrePage = page;
   renderHomeGenre(homeGenreCurrent);
   document.getElementById("genres")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function renderTrending(): Promise<void> {
+  const grid = document.getElementById("trendingGrid");
+  if (!grid) return;
+  try {
+    const list = await fetchPopular(5);
+    trendingTop = list[0] ?? null;
+    grid.innerHTML = list.map((c, i) => cardHtml(c, i + 1)).join("");
+  } catch {
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Failed to load trending comics.</div>';
+  }
+}
+async function renderLatestUpdates(): Promise<void> {
+  const list = document.getElementById("latestList");
+  if (!list) return;
+  try {
+    const comics = await fetchLatestUpdates(3);
+    list.innerHTML = comics
+      .map(
+        (c) =>
+          `<div class="row" style="cursor:pointer" onclick="openComic('${c.id}')"><div class="thumb">${c.cover ? `<img src="${c.cover}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:7px">` : ""}</div><div><strong>${c.title}</strong><small>Chapter ${c.chapters}</small></div><span class="new">NEW</span></div>`,
+      )
+      .join("");
+  } catch {
+    list.innerHTML = '<div class="empty">Failed to load latest updates.</div>';
+  }
+}
+async function renderContinueReading(): Promise<void> {
+  const box = document.getElementById("continueReading");
+  if (!box) return;
+  const saved: Record<string, ReadingProgressEntry> = JSON.parse(
+    localStorage.getItem("panpan-progress") || "{}",
+  );
+  const entries = Object.entries(saved).sort((a, b) => b[1].updated - a[1].updated);
+  if (entries.length === 0) {
+    box.innerHTML = '<div class="empty">You have not started reading anything yet.</div>';
+    return;
+  }
+  const [mangaId] = entries[0][0].split("::");
+  try {
+    const c = await comicBy(mangaId);
+    box.innerHTML = `<div class="row" style="cursor:pointer" onclick="openComic('${c.id}')"><div class="thumb">${c.cover ? `<img src="${c.cover}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:7px">` : ""}</div><div><strong>${c.title}</strong><small>${Math.round(entries[0][1].percent)}% progress</small></div><span class="new">CONTINUE</span></div>`;
+  } catch {
+    box.innerHTML = '<div class="empty">You have not started reading anything yet.</div>';
+  }
+}
+function startReading(): void {
+  if (trendingTop) openComic(trendingTop.id);
+  else showExplore();
 }
 
 function openFAQ(): void {
@@ -279,99 +372,141 @@ function applyFilters(): void {
   renderExplore();
 }
 
-function openComic(id: string): void {
+let openComicRequestId = 0;
+async function openComic(id: string): Promise<void> {
   currentComic = id;
-  const c = comicBy(id);
+  const requestId = ++openComicRequestId;
   hideViews();
   $("detailView").classList.add("active");
   setNav("");
-  $("detailTitle").textContent = c.title;
-  $("detailGenre").textContent = c.type + " · " + c.genres.join(" · ");
-  $("detailDesc").textContent = c.desc;
-  $("detailRating").textContent = String(c.rating);
-  $("detailRatingBig").textContent = String(c.rating);
-  $("detailRatingCount").textContent = Math.round(parseFloat(c.readers) * 173).toLocaleString();
-  $("detailChapters").textContent = String(c.chapters);
-  $("detailReaders").textContent = c.readers;
-  $("detailChips").innerHTML =
-    c.genres.map((g) => `<span class="chip">${g}</span>`).join("") +
-    `<span class="chip">${c.status}</span><span class="chip">${c.type}</span>`;
-  $("detailCover").style.background = coverGradient(c.id);
-  $("detailCover").dataset.title = c.title;
-  $("followBtn").textContent = followed.has(id) ? "Following" : "Follow";
-  buildChapters(c.chapters);
+  $("detailTitle").textContent = "Loading…";
+  $("detailGenre").textContent = "";
+  $("detailDesc").textContent = "";
+  $("detailChips").innerHTML = "";
+  $("detailCover").style.backgroundImage = "";
+  $("chapterList").innerHTML = "";
   scrollTop();
   history.pushState({ view: "detail", id }, "", "#comic-" + id);
+
+  try {
+    const [c, chapters] = await Promise.all([comicBy(id), getChaptersFor(id)]);
+    if (requestId !== openComicRequestId) return;
+    $("detailTitle").textContent = c.title;
+    $("detailGenre").textContent = c.type + " · " + c.genres.join(" · ");
+    $("detailDesc").textContent = c.desc;
+    $("detailRating").textContent = String(c.rating);
+    $("detailRatingBig").textContent = String(c.rating);
+    $("detailRatingCount").textContent = c.readers;
+    // MangaDex's lastChapter attribute is frequently blank even when chapters
+    // exist, so prefer the actually-fetched chapter feed when it's available.
+    const latestChapterNumber = chapters[0]?.chapterNumber ?? c.chapters;
+    $("detailChapters").textContent = String(latestChapterNumber);
+    $("detailReaders").textContent = c.readers;
+    $("detailChips").innerHTML =
+      c.genres.map((g) => `<span class="chip">${g}</span>`).join("") +
+      `<span class="chip">${c.status}</span><span class="chip">${c.type}</span>`;
+    if (c.cover) {
+      $("detailCover").style.backgroundImage = `url("${c.cover}")`;
+      $("detailCover").style.backgroundSize = "cover";
+      $("detailCover").style.backgroundPosition = "center";
+    }
+    $("detailCover").dataset.title = c.title;
+    $("followBtn").textContent = followed.has(id) ? "Following" : "Follow";
+    buildChapters(chapters, id);
+  } catch {
+    if (requestId !== openComicRequestId) return;
+    $("detailTitle").textContent = "Failed to load this comic.";
+  }
 }
-function coverGradient(id: string): string {
-  const maps: Record<string, string> = {
-    solo: "linear-gradient(145deg,#641715,#111214 55%,#090909)",
-    jjk: "linear-gradient(145deg,#26313d,#101214 50%,#641715)",
-    bleach: "linear-gradient(145deg,#341716,#111,#a72d29)",
-    mha: "linear-gradient(145deg,#24253b,#0b0c0e 55%,#6c1c1b)",
-    onepiece: "linear-gradient(145deg,#4b2012,#101112 55%,#a72c29)",
-  };
-  return maps[id] || "linear-gradient(145deg,#2a2020,#101112)";
-}
-function buildChapters(total: number): void {
+function buildChapters(entries: ChapterEntry[], mangaId: string): void {
   const box = $("chapterList");
   box.className = "chapterScroll";
-  box.innerHTML = "";
-  const start = Math.max(1, total - 39);
-  for (let n = total; n >= start; n--)
-    box.insertAdjacentHTML(
-      "beforeend",
-      `<div class="chapterRow" onclick="openReader(${n},'${currentComic}')"><div><strong>Chapter ${n}</strong><small>${n === total ? "Latest chapter" : "Updated recently"} · 5 min read</small></div><span class="chapterGo">Read →</span></div>`,
-    );
+  if (entries.length === 0) {
+    box.innerHTML = '<div class="empty">No Indonesian or English chapters found for this comic.</div>';
+    return;
+  }
+  box.innerHTML = entries
+    .map(
+      (e, i) =>
+        `<div class="chapterRow" onclick="openReader('${e.id}','${mangaId}')"><div><strong>${e.label}</strong><small>${i === 0 ? "Latest chapter" : "Updated"} · ${new Date(e.publishAt).toLocaleDateString()}</small></div><span class="chapterGo">Read →</span></div>`,
+    )
+    .join("");
 }
-function openReader(ch: number, id: string = currentComic): void {
+let openReaderRequestId = 0;
+async function openReader(chapterId: string, id: string = currentComic): Promise<void> {
   const enteringReader = !$("readerView").classList.contains("active");
   currentComic = id;
-  currentChapter = Number(ch);
-  const c = comicBy(id);
+  currentChapterId = chapterId;
+  const requestId = ++openReaderRequestId;
   hideViews();
   $("readerView").classList.add("active");
   setNav("");
-  $("readerTitle").textContent = c.title + " · Chapter " + currentChapter;
-  const sel = $("readerSelect");
-  sel.innerHTML = "";
-  for (let n = c.chapters; n >= Math.max(1, c.chapters - 19); n--)
-    sel.insertAdjacentHTML(
-      "beforeend",
-      `<option value="${n}" ${n === currentChapter ? "selected" : ""}>Chapter ${n}</option>`,
-    );
-  const r = $("readerChapters");
-  r.innerHTML = "";
-  for (let n = c.chapters; n >= Math.max(1, c.chapters - 29); n--)
-    r.insertAdjacentHTML(
-      "beforeend",
-      `<div class="rCh ${n === currentChapter ? "active" : ""}" onclick="openReader(${n},'${id}')">Chapter ${n}</div>`,
-    );
-  const saved: Record<string, ReadingProgressEntry> = JSON.parse(
-    localStorage.getItem("panpan-progress") || "{}",
-  );
-  const pct = saved[id + ":" + currentChapter]?.percent || 0;
-  $("readerProgressBar").style.width = pct + "%";
+  $("readerTitle").textContent = "Loading…";
+  $("readerSelect").innerHTML = "";
+  $("readerChapters").innerHTML = "";
+  $("readerView").querySelector(".page")!.innerHTML = '<div class="empty">Loading pages…</div>';
   window.scrollTo({ top: 0, behavior: "instant" });
   scrollTop();
-  history.pushState({ view: "reader", id, ch: currentChapter }, "", "#read-" + id + "-" + currentChapter);
+  history.pushState({ view: "reader", id, chapterId }, "", "#read-" + id + "::" + chapterId);
   updateFullscreenButton();
   if (enteringReader && !document.fullscreenElement && document.documentElement.requestFullscreen)
     document.documentElement.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
+
+  try {
+    const [c, chapters, pages] = await Promise.all([
+      comicBy(id),
+      getChaptersFor(id),
+      fetchChapterPages(chapterId),
+    ]);
+    if (requestId !== openReaderRequestId) return;
+    const entry = chapters.find((e) => e.id === chapterId);
+    $("readerTitle").textContent = c.title + " · " + (entry?.label ?? "Chapter");
+
+    const sel = $("readerSelect") as HTMLSelectElement;
+    sel.innerHTML = chapters
+      .map((e) => `<option value="${e.id}" ${e.id === chapterId ? "selected" : ""}>${e.label}</option>`)
+      .join("");
+
+    $("readerChapters").innerHTML = chapters
+      .map((e) => `<div class="rCh ${e.id === chapterId ? "active" : ""}" onclick="openReader('${e.id}','${id}')">${e.label}</div>`)
+      .join("");
+
+    const page = $("readerView").querySelector(".page") as HTMLElement;
+    page.innerHTML =
+      pages.map((url) => `<img class="comicPage" src="${url}" alt="" loading="lazy">`).join("") ||
+      '<div class="empty">No pages available for this chapter.</div>';
+
+    const saved: Record<string, ReadingProgressEntry> = JSON.parse(
+      localStorage.getItem("panpan-progress") || "{}",
+    );
+    const pct = saved[id + "::" + chapterId]?.percent || 0;
+    $("readerProgressBar").style.width = pct + "%";
+  } catch {
+    if (requestId !== openReaderRequestId) return;
+    $("readerTitle").textContent = "Failed to load this chapter.";
+    ($("readerView").querySelector(".page") as HTMLElement).innerHTML =
+      '<div class="empty">Failed to load pages from MangaDex.</div>';
+  }
 }
 function changeChapter(v: string): void {
-  openReader(Number(v), currentComic);
+  openReader(v, currentComic);
 }
 function openCurrentReader(): void {
-  openReader(currentChapter, currentComic);
+  if (currentChapterId) openReader(currentChapterId, currentComic);
+  else toast("You have not opened a reader yet.");
 }
-function prevChapter(): void {
-  if (currentChapter > 1) openReader(currentChapter - 1, currentComic);
+async function prevChapter(): Promise<void> {
+  const list = chaptersCache.get(currentComic);
+  if (!list || !currentChapterId) return;
+  const idx = list.findIndex((e) => e.id === currentChapterId);
+  if (idx >= 0 && idx < list.length - 1) openReader(list[idx + 1].id, currentComic);
   else toast("Already at the first chapter.");
 }
-function nextChapter(): void {
-  const max = comicBy(currentComic).chapters;
-  if (currentChapter < max) openReader(currentChapter + 1, currentComic);
+async function nextChapter(): Promise<void> {
+  const list = chaptersCache.get(currentComic);
+  if (!list || !currentChapterId) return;
+  const idx = list.findIndex((e) => e.id === currentChapterId);
+  if (idx > 0) openReader(list[idx - 1].id, currentComic);
   else toast("You are at the latest chapter.");
 }
 function goBackFromDetail(): void {
@@ -477,28 +612,53 @@ function openAccount(tab?: AccountTab): void {
   scrollTop();
   history.pushState({ view: "account", tab: tab || "overview" }, "", "#account");
 }
-function accountTab(tab: AccountTab): void {
+async function accountTab(tab: AccountTab): Promise<void> {
   document
     .querySelectorAll<HTMLElement>(".accountTab[data-tab]")
     .forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   const p = $("accountPanel");
   if (tab === "overview")
-    p.innerHTML = `<div class="eyebrow">Overview</div><h2>Welcome back, Irfan.</h2><p>Your demo reading profile at a glance.</p><div class="statCards"><div class="statCard"><b>8</b><span>Comics read</span></div><div class="statCard"><b>${followed.size}</b><span>Saved titles</span></div><div class="statCard"><b>198</b><span>Current chapter</span></div></div><div class="accountList"><div class="accountItem"><div><strong>Continue reading</strong><small>Solo Leveling · Chapter 198</small></div><button class="secondary" onclick="openReader(198,'solo')">Continue</button></div><div class="accountItem"><div><strong>Latest notification</strong><small>One Piece has a new chapter.</small></div><button class="secondary" onclick="accountTab('notifications')">View</button></div></div>`;
+    p.innerHTML = `<div class="eyebrow">Overview</div><h2>Welcome back, Irfan.</h2><p>Your demo reading profile at a glance.</p><div class="statCards"><div class="statCard"><b>${followed.size}</b><span>Saved titles</span></div></div><div class="accountList"><div class="accountItem"><div><strong>Latest notification</strong><small>Check the notifications tab.</small></div><button class="secondary" onclick="accountTab('notifications')">View</button></div></div>`;
   if (tab === "profile")
     p.innerHTML = `<div class="eyebrow">Profile</div><h2>About you.</h2><p>Manage the public information shown on your demo profile.</p><div class="setting"><div><strong>Display name</strong><small>Irfan Demo</small></div><button class="secondary" onclick="toast('Demo profile editor opened.')">Edit</button></div><div class="setting"><div><strong>Email</strong><small>irfan@example.com</small></div><span class="typeBadge">EMAIL</span></div><div class="setting"><div><strong>Primary login</strong><small>Google</small></div><span class="statusBadge">CONNECTED</span></div><div class="setting"><div><strong>Public activity</strong><small>Show ratings and comments on your profile.</small></div><button class="toggle on" onclick="this.classList.toggle('on')"></button></div>`;
-  if (tab === "library")
-    p.innerHTML = `<div class="eyebrow">Library</div><h2>My library.</h2><p>Titles you follow are kept here.</p><div class="accountList">${
-      [...followed]
-        .map((id) => {
-          const c = comicBy(id);
-          return `<div class="accountItem"><div><strong>${c.title}</strong><small>${c.type} · ${c.status} · ★ ${c.rating}</small></div><button class="secondary" onclick="openComic('${id}')">Open</button></div>`;
-        })
-        .join("") || '<div class="empty">Your library is empty.</div>'
-    }</div>`;
+  if (tab === "library") {
+    p.innerHTML = `<div class="eyebrow">Library</div><h2>My library.</h2><p>Titles you follow are kept here.</p><div class="accountList" id="libraryList">Loading…</div>`;
+    const ids = [...followed];
+    const comicsList = await Promise.all(ids.map((id) => comicBy(id).catch(() => null)));
+    const list = document.getElementById("libraryList");
+    if (list)
+      list.innerHTML =
+        comicsList
+          .filter((c): c is Comic => c !== null)
+          .map(
+            (c) =>
+              `<div class="accountItem"><div><strong>${c.title}</strong><small>${c.type} · ${c.status} · ★ ${c.rating}</small></div><button class="secondary" onclick="openComic('${c.id}')">Open</button></div>`,
+          )
+          .join("") || '<div class="empty">Your library is empty.</div>';
+  }
   if (tab === "history")
-    p.innerHTML = `<div class="eyebrow">Reading</div><h2>Reading history.</h2><p>Demo progress saved for this session.</p><div class="accountList"><div class="accountItem"><div><strong>Solo Leveling</strong><small>Chapter 198 · 72% progress · Today</small></div><button class="secondary" onclick="openReader(198,'solo')">Continue</button></div><div class="accountItem"><div><strong>Jujutsu Kaisen</strong><small>Chapter 236 · Completed · Yesterday</small></div><button class="secondary" onclick="openReader(236,'jjk')">Open</button></div></div>`;
+    p.innerHTML = `<div class="eyebrow">Reading</div><h2>Reading history.</h2><p>Demo progress saved for this session.</p><div class="accountList" id="historyList">Loading…</div>`;
+  if (tab === "history") {
+    const saved: Record<string, ReadingProgressEntry> = JSON.parse(
+      localStorage.getItem("panpan-progress") || "{}",
+    );
+    const entries = Object.entries(saved).sort((a, b) => b[1].updated - a[1].updated);
+    const rows = await Promise.all(
+      entries.map(async ([key, progress]) => {
+        const [mangaId, chapterId] = key.split("::");
+        try {
+          const c = await comicBy(mangaId);
+          return `<div class="accountItem"><div><strong>${c.title}</strong><small>${Math.round(progress.percent)}% progress</small></div><button class="secondary" onclick="openReader('${chapterId}','${mangaId}')">Continue</button></div>`;
+        } catch {
+          return "";
+        }
+      }),
+    );
+    const list = document.getElementById("historyList");
+    if (list) list.innerHTML = rows.join("") || '<div class="empty">No reading history yet.</div>';
+  }
   if (tab === "notifications")
-    p.innerHTML = `<div class="eyebrow">Notifications</div><h2>Stay updated.</h2><p>New chapters from followed titles appear here.</p><div class="accountList"><div class="accountItem"><div><strong>One Piece</strong><small>New chapter available · 12 min ago</small></div><span class="new">NEW</span></div><div class="accountItem"><div><strong>Solo Leveling</strong><small>You reached Chapter 198 · Today</small></div><span style="color:#777;font-size:12px">READ</span></div></div>`;
+    p.innerHTML = `<div class="eyebrow">Notifications</div><h2>Stay updated.</h2><p>New chapters from followed titles appear here.</p><div class="accountList"><div class="empty">This is a demo — notifications are not tracked live.</div></div>`;
   if (tab === "settings")
     p.innerHTML = `<div class="eyebrow">Preferences</div><h2>Settings.</h2><p>Reader, appearance and notification preferences.</p><div class="setting"><div><strong>Auto next chapter</strong><small>Open the next chapter after finishing a reader page.</small></div><button class="toggle on" onclick="this.classList.toggle('on')"></button></div><div class="setting"><div><strong>Chapter notifications</strong><small>Notify me when followed comics update.</small></div><button class="toggle on" onclick="this.classList.toggle('on')"></button></div><div class="setting"><div><strong>Reduce animations</strong><small>Use simpler transitions on mobile.</small></div><button class="toggle" onclick="this.classList.toggle('on')"></button></div><div class="setting"><div><strong>Theme</strong><small>Switch between dark and light mode.</small></div><button class="secondary" onclick="toggleTheme()">Toggle theme</button></div><div class="setting"><div><strong>Reader preferences</strong><small>Open reader settings to customize page display.</small></div><button class="secondary" onclick="openCurrentReader()">Open reader</button></div>`;
   if (tab === "security")
@@ -508,11 +668,11 @@ function toggleReaderSettings(): void {
   $("readerSettings").classList.toggle("open");
 }
 function setReaderMode(mode: ReaderMode): void {
-  const page = $("readerView").querySelector<HTMLElement>(".comicPage");
-  if (page) {
-    page.style.maxWidth = mode === "single" ? "720px" : "100%";
-    page.style.minHeight = mode === "continuous" ? "900px" : "760px";
-  }
+  $("readerView")
+    .querySelectorAll<HTMLElement>(".comicPage")
+    .forEach((page) => {
+      page.style.maxWidth = mode === "single" ? "720px" : "100%";
+    });
   const select = document.getElementById("readerMode") as HTMLSelectElement | null;
   if (select) select.value = mode;
   localStorage.setItem("panpan-reader-mode", mode);
@@ -528,10 +688,10 @@ function setReaderBrightness(v: string): void {
   $("readerView").style.filter = `brightness(${Number(v) / 100})`;
 }
 function saveReadingProgress(): void {
-  if (!$("readerView").classList.contains("active")) return;
+  if (!$("readerView").classList.contains("active") || !currentChapterId) return;
   const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
   const percent = Math.min(100, Math.round((window.scrollY / max) * 100));
-  const key = currentComic + ":" + currentChapter;
+  const key = currentComic + "::" + currentChapterId;
   const saved: Record<string, ReadingProgressEntry> = JSON.parse(
     localStorage.getItem("panpan-progress") || "{}",
   );
@@ -603,10 +763,14 @@ document.addEventListener(
   true,
 );
 
+const debouncedExplore = debounce(() => renderExplore(), 300);
+const debouncedHomeSearch = debounce(() => renderHomeSearchResults(), 300);
+const debouncedSearch = debounce(() => renderSearchResults(), 300);
+
 const searchInput = $("search") as HTMLInputElement;
 searchInput.addEventListener("input", () => {
-  renderSearchResults();
-  if ($("exploreView").classList.contains("active")) renderExplore();
+  debouncedSearch();
+  if ($("exploreView").classList.contains("active")) debouncedExplore();
 });
 document.addEventListener("click", (e) => {
   if (!(e.target as HTMLElement).closest(".searchWrap")) hideSearchResults();
@@ -620,7 +784,7 @@ searchInput.addEventListener("keydown", (e) => {
 });
 const homeSearch = document.getElementById("homeSearch") as HTMLInputElement | null;
 if (homeSearch) {
-  homeSearch.addEventListener("input", renderHomeSearchResults);
+  homeSearch.addEventListener("input", debouncedHomeSearch);
   homeSearch.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       const first = $("homeSearchResults").querySelector<HTMLElement>(".homeSearchResult");
@@ -636,8 +800,9 @@ if (homeSearch) {
 window.addEventListener("popstate", (e) => {
   const s = location.hash;
   if (s.startsWith("#read-")) {
-    const parts = s.replace("#read-", "").split("-");
-    openReader(Number(parts.pop()), parts.join("-"));
+    const [mangaId, chapterId] = s.replace("#read-", "").split("::");
+    if (mangaId && chapterId) openReader(chapterId, mangaId);
+    else goHome();
   } else if (s.startsWith("#comic-")) openComic(s.replace("#comic-", ""));
   else if (s === "#explore") showExplore();
   else if (s === "#account") openAccount("overview");
@@ -647,6 +812,9 @@ window.addEventListener("popstate", (e) => {
   else goHome();
 });
 loadTheme();
+renderTrending();
+renderLatestUpdates();
+renderContinueReading();
 renderExplore();
 renderHomeGenre("All");
 
@@ -695,4 +863,5 @@ Object.assign(window, {
   hideSearchResults,
   clearHomeSearch,
   openCurrentReader,
+  startReading,
 });

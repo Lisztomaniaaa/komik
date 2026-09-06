@@ -40,7 +40,7 @@
 <div class="eyebrow">Read your next story</div>
 <h1>Dive into <span>epic worlds.</span></h1>
 <p>Discover manga, manhwa and webcomics in one clean reading experience. Follow new chapters, save favorites and keep reading wherever you are.</p>
-<div class="btnrow"><button class="primary" onclick="openComic('solo')">Start reading →</button><button class="secondary" onclick="showExplore()">Explore now</button></div>
+<div class="btnrow"><button class="primary" onclick="startReading()">Start reading →</button><button class="secondary" onclick="showExplore()">Explore now</button></div>
 </div></div>
 
 <section class="homeSearchSection" aria-label="Search comics">
@@ -53,23 +53,13 @@
 </section>
 
 <section class="section"><div class="sectionHead"><h2>Trending now</h2><a href="#" onclick="showExplore();return false">View all →</a></div>
-<div class="grid">
-<div class="card" data-title="solo leveling" onclick="openComic('solo')"><div class="cover"><span class="rank">#1</span><div class="coverText">Solo<br>Leveling</div></div><div class="title">Solo Leveling</div><div class="meta">Chapter 200 · <span class="star">★ 4.9</span></div></div>
-<div class="card" data-title="jujutsu kaisen" onclick="openComic('jjk')"><div class="cover c2"><span class="rank">#2</span><div class="coverText">Jujutsu<br>Kaisen</div></div><div class="title">Jujutsu Kaisen</div><div class="meta">Chapter 236 · <span class="star">★ 4.8</span></div></div>
-<div class="card" data-title="bleach" onclick="openComic('bleach')"><div class="cover c3"><span class="rank">#3</span><div class="coverText">Bleach</div></div><div class="title">Bleach</div><div class="meta">Chapter 685 · <span class="star">★ 4.7</span></div></div>
-<div class="card" data-title="my hero academia" onclick="openComic('mha')"><div class="cover c4"><span class="rank">#4</span><div class="coverText">My Hero<br>Academia</div></div><div class="title">My Hero Academia</div><div class="meta">Chapter 430 · <span class="star">★ 4.8</span></div></div>
-<div class="card" data-title="one piece" onclick="openComic('onepiece')"><div class="cover c5"><span class="rank">#5</span><div class="coverText">One<br>Piece</div></div><div class="title">One Piece</div><div class="meta">Chapter 1122 · <span class="star">★ 4.9</span></div></div>
-</div></section>
+<div id="trendingGrid" class="grid"></div></section>
 
 <section class="section"><div class="sectionHead"><h2>Continue reading</h2><a href="#" onclick="openAccount('history');return false">History →</a></div>
-<div class="list"><div class="row" style="cursor:pointer" onclick="openReader(198,'solo')"><div class="thumb"></div><div><strong>Solo Leveling</strong><small>Continue from Chapter 198 · 72% progress</small></div><span class="new">CONTINUE</span></div></div></section>
+<div id="continueReading" class="list"></div></section>
 
 <section class="section" id="latest"><div class="sectionHead"><h2>Latest updates</h2><a href="#" onclick="showExplore();return false">View all →</a></div>
-<div class="list">
-<div class="row" style="cursor:pointer" onclick="openComic('tbate')"><div class="thumb"></div><div><strong>The Beginning After the End</strong><small>Chapter 187</small></div><span class="new">NEW</span></div>
-<div class="row" style="cursor:pointer" onclick="openComic('orv')"><div class="thumb"></div><div><strong>Omniscient Reader's Viewpoint</strong><small>Chapter 214</small></div><span class="new">NEW</span></div>
-<div class="row" style="cursor:pointer" onclick="openComic('heaven')"><div class="thumb"></div><div><strong>Surviving as a Genius on Borrowed Time</strong><small>Chapter 92</small></div><span class="new">NEW</span></div>
-</div></section>
+<div id="latestList" class="list"></div></section>
 
 <section class="section" id="genres">
 <div class="sectionHead"><h2>Browse by genre</h2><a href="#" onclick="showExplore();return false">Explore all →</a></div>

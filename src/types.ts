@@ -1,5 +1,5 @@
 export type ComicType = "Manga" | "Manhwa" | "Manhua" | "Webtoon";
-export type ComicStatus = "Ongoing" | "Completed" | "Hiatus";
+export type ComicStatus = "Ongoing" | "Completed" | "Hiatus" | "Cancelled";
 
 export interface Comic {
   id: string;
@@ -11,6 +11,14 @@ export interface Comic {
   chapters: number;
   readers: string;
   desc: string;
+  cover: string | null;
+}
+
+export interface ChapterEntry {
+  id: string;
+  label: string;
+  chapterNumber: number | null;
+  publishAt: string;
 }
 
 export type FilterKey = "type" | "genre" | "status";
