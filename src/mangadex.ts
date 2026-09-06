@@ -3,6 +3,14 @@ import type { ChapterEntry, Comic, ComicStatus, ComicType } from "./types";
 const API_BASE = "/mdx";
 const COVER_BASE = "https://uploads.mangadex.org/covers";
 
+// Routes an image URL through our own origin (api/img.ts in production, the
+// Vite dev-server middleware locally) instead of letting the browser fetch it
+// from MangaDex directly. Some networks block the image CDN hosts even when
+// api.mangadex.org (proxied separately via /mdx) is reachable.
+function proxiedImage(url: string): string {
+  return `/api/img?u=${encodeURIComponent(url)}`;
+}
+
 // The 7 genres this app's UI offers as filters, mapped to MangaDex's tag UUIDs
 // (from GET /manga/tag, group "genre"). MangaDex has many more tags; this app
 // only exposes the subset the original mockup's markup already has buttons for.
@@ -71,7 +79,7 @@ function pickLocale(record: Record<string, string> | undefined): string {
 function coverUrl(manga: MangaDexManga): string | null {
   const cover = manga.relationships.find((r) => r.type === "cover_art");
   const fileName = cover?.attributes?.fileName;
-  return fileName ? `${COVER_BASE}/${manga.id}/${fileName}.512.jpg` : null;
+  return fileName ? proxiedImage(`${COVER_BASE}/${manga.id}/${fileName}.512.jpg`) : null;
 }
 
 function deriveType(manga: MangaDexManga): ComicType {
@@ -264,5 +272,7 @@ export async function fetchChapters(mangaId: string): Promise<ChapterEntry[]> {
 
 export async function fetchChapterPages(chapterId: string): Promise<string[]> {
   const json = await getJson<MangaDexAtHomeResponse>(`/at-home/server/${chapterId}`);
-  return json.chapter.data.map((fileName) => `${json.baseUrl}/data/${json.chapter.hash}/${fileName}`);
+  return json.chapter.data.map((fileName) =>
+    proxiedImage(`${json.baseUrl}/data/${json.chapter.hash}/${fileName}`),
+  );
 }
