@@ -15,9 +15,6 @@ service cloud.firestore {
                     && request.resource.data.body is string
                     && request.resource.data.body.size() > 0
                     && request.resource.data.body.size() <= 2000
-                    && request.resource.data.rating is int
-                    && request.resource.data.rating >= 1
-                    && request.resource.data.rating <= 5
                     && request.resource.data.manga_id is string
                     && request.resource.data.thread_id is string
                     && (request.resource.data.chapter_id == null || request.resource.data.chapter_id is string);

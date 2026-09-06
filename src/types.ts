@@ -55,7 +55,6 @@ export interface CommentRow {
   manga_id: string;
   chapter_id: string | null;
   name: string;
-  rating: number;
   body: string;
   created_at: string;
 }

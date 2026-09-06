@@ -42,7 +42,6 @@ export async function fetchThread(mangaId: string, chapterId: string | null): Pr
       manga_id: string;
       chapter_id: string | null;
       name: string;
-      rating: number;
       body: string;
       created_at?: { toDate: () => Date };
     };
@@ -52,7 +51,6 @@ export async function fetchThread(mangaId: string, chapterId: string | null): Pr
       manga_id: data.manga_id,
       chapter_id: data.chapter_id,
       name: data.name,
-      rating: data.rating,
       body: data.body,
       created_at: createdAt.toISOString(),
     };
@@ -66,7 +64,6 @@ export async function postComment(row: {
   chapter_id: string | null;
   uid: string;
   name: string;
-  rating: number;
   body: string;
 }): Promise<CommentRow> {
   if (!db) throw new Error("Comments are not configured.");
@@ -77,7 +74,6 @@ export async function postComment(row: {
     chapter_id: row.chapter_id,
     uid: row.uid,
     name: row.name,
-    rating: row.rating,
     body: row.body,
     created_at: now,
   });
@@ -86,7 +82,6 @@ export async function postComment(row: {
     manga_id: row.manga_id,
     chapter_id: row.chapter_id,
     name: row.name,
-    rating: row.rating,
     body: row.body,
     created_at: now.toISOString(),
   };
