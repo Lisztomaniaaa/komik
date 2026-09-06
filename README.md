@@ -1,66 +1,37 @@
 # komik
 
-## Pakai model router lain (Pareto Inference)
+Panpan Comics — prototipe reader komik (frontend saja, semua data dummy/lokal).
 
-Claude Code bicara **Anthropic Messages API** (`/v1/messages`).
-`https://api.paretoinference.com/v1` cuma menyediakan **OpenAI chat completions**
-(`/v1/chat/completions`) — tidak ada `/v1/messages`. Jadi `ANTHROPIC_BASE_URL`
-tidak bisa langsung diarahkan ke sana; perlu jembatan penerjemah di tengah.
+## Stack
 
-Repo ini menyiapkan jembatan itu memakai LiteLLM proxy.
+TypeScript murni + Vite (tanpa framework seperti React/Vue). Struktur:
 
 ```
-Claude Code  ──Anthropic /v1/messages──▶  LiteLLM (127.0.0.1:4000)
-                                              │
-                                              └──OpenAI /v1/chat/completions──▶  api.paretoinference.com
+index.html       markup halaman (semua view: home, explore, detail, reader, account, dst.)
+src/style.css    semua styling (dark theme)
+src/types.ts     tipe data (Comic, Filters, dll.)
+src/data.ts      daftar komik dummy, ditipein sebagai Comic[]
+src/app.ts       seluruh logic aplikasi (navigasi, filter, reader, login, dsb.)
+src/uiChrome.ts  perilaku menu mobile/drawer
+src/main.ts      entry point, cuma import ketiga file di atas
 ```
 
-### Model yang tersedia di router
+Markup masih pakai `onclick="fn(...)"` inline seperti aslinya; fungsi-fungsi yang
+dipanggil dari situ di-expose ke `window` di akhir `src/app.ts` karena ES module
+tidak otomatis bocor ke global scope.
 
-| Nama di Claude Code | Model upstream            |
-| ------------------- | ------------------------- |
-| `glm-5.3`           | `z-ai/glm-5.3`            |
-| `glm-5.3-flash`     | `z-ai/glm-5.3-flash`      |
-| `deepseek-v4-flash` | `deepseek/deepseek-v4-flash` |
-
-### Cara pakai
+## Cara pakai
 
 ```sh
-cp .env.example .env
-# isi PARETO_API_KEY di .env
-
-./router/start-router.sh --bg     # sekali install venv + LiteLLM, lalu jalan di :4000
-source router/claude-env.sh       # arahkan Claude Code ke jembatan
-claude
+npm install
+npm run dev       # dev server dengan hot reload
+npm run build     # build production ke dist/
+npm run preview   # jalankan hasil build production
 ```
 
-Berhenti: `./router/stop-router.sh`.
+## Catatan
 
-Ganti model utama sebelum `source`:
-
-```sh
-ANTHROPIC_MODEL=deepseek-v4-flash source router/claude-env.sh
-```
-
-### Cek jembatan tanpa Claude Code
-
-```sh
-curl -s --noproxy '*' http://127.0.0.1:4000/v1/messages \
-  -H 'x-api-key: sk-local-dev' \
-  -H 'anthropic-version: 2023-06-01' \
-  -H 'content-type: application/json' \
-  -d '{"model":"glm-5.3","max_tokens":100,"messages":[{"role":"user","content":"halo"}]}'
-```
-
-### Catatan
-
-- **Kunci API tidak pernah masuk git.** `.env` ada di `.gitignore`; yang di-commit
-  hanya `.env.example`.
-- `.claude/settings.json` memetakan ketiga model ke perilaku klien yang dikenal
-  Claude Code lewat `modelPicker.behavesAs`, karena nama modelnya tidak ada di
-  katalog bawaan. `CLAUDE_CODE_MAX_CONTEXT_TOKENS` di `claude-env.sh` menyetel
-  jendela konteks (default 128k) supaya auto-compact tidak salah asumsi —
-  sesuaikan kalau jendela aslinya berbeda.
-- Ketiga model mengembalikan blok `thinking` tanpa `signature`. Streaming dan
-  tool calling sudah diuji jalan; kalau ada percakapan panjang yang tiba-tiba
-  ditolak, itu penyebab pertama yang perlu dicurigai.
+- Semua data (komik, komentar, login, progress baca) simulasi lokal — tidak ada
+  backend/API sungguhan.
+- `.detailCover:after` di CSS selalu menampilkan teks "SOLO LEVELING" di cover
+  halaman detail (peninggalan dari mockup asli, bukan bug baru).
