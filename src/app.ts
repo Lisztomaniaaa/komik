@@ -8,7 +8,7 @@ import {
   fetchMangaDetail,
   fetchPopular,
   quickSearch,
-} from "./mangadex";
+} from "./komiku";
 import type {
   AccountTab,
   ChapterEntry,
@@ -29,8 +29,8 @@ function $(id: string): HTMLElement {
 }
 
 // Solo Leveling — used only to seed the demo's "already following one
-// title" starting state with a manga id that actually exists on MangaDex.
-const SEED_FOLLOWED_ID = "32d76d19-8a05-4db0-9fc2-e0b0648fe9d0";
+// title" starting state with a manga slug that actually exists on Komiku.
+const SEED_FOLLOWED_ID = "solo-leveling-id";
 
 let filters: Filters = { type: "All", genre: "All", status: "All" };
 let currentComic = "";
@@ -182,7 +182,7 @@ async function renderExplore(): Promise<void> {
     renderPagination("explorePagination", explorePage, pages, "setExplorePage", total);
   } catch {
     if (requestId !== exploreRequestId) return;
-    grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Failed to load comics from MangaDex.</div>';
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Failed to load comics from Komiku.</div>';
   }
 }
 let homeGenreRequestId = 0;
@@ -207,7 +207,7 @@ async function renderHomeGenre(genre = "All"): Promise<void> {
     renderPagination("genrePagination", homeGenrePage, pages, "setHomeGenrePage", total);
   } catch {
     if (requestId !== homeGenreRequestId) return;
-    grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Failed to load comics from MangaDex.</div>';
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Failed to load comics from Komiku.</div>';
   }
 }
 function setHomeGenre(genre: string, btn: HTMLElement): void {
@@ -383,8 +383,8 @@ async function openComic(id: string): Promise<void> {
     $("detailRating").textContent = String(c.rating);
     $("detailRatingBig").textContent = String(c.rating);
     $("detailRatingCount").textContent = c.readers;
-    // MangaDex's lastChapter attribute is frequently blank even when chapters
-    // exist, so prefer the actually-fetched chapter feed when it's available.
+    // The chapter count from the detail page can lag the actual chapter
+    // feed, so prefer the highest chapter number actually fetched.
     const latestChapterNumber = chapters[0]?.chapterNumber ?? c.chapters;
     $("detailChapters").textContent = String(latestChapterNumber);
     $("detailReaders").textContent = c.readers;
@@ -445,13 +445,14 @@ async function openReader(chapterId: string, id: string = currentComic): Promise
   else history.replaceState({ view: "reader", id, chapterId }, "", hash);
 
   try {
-    const [c, chapters, pages] = await Promise.all([
-      comicBy(id),
-      getChaptersFor(id),
-      fetchChapterPages(chapterId),
-    ]);
+    const [c, chapters] = await Promise.all([comicBy(id), getChaptersFor(id)]);
     if (requestId !== openReaderRequestId) return;
     const entry = chapters.find((e) => e.id === chapterId);
+    // Komiku sometimes serves a title's chapters under a different slug than
+    // its detail page (see ChapterEntry.readerSlug), so this can't be
+    // fetched in parallel with the chapter list above — it needs `entry`.
+    const pages = await fetchChapterPages(entry?.readerSlug ?? id, chapterId);
+    if (requestId !== openReaderRequestId) return;
     $("readerTitle").textContent = c.title + " · " + (entry?.label ?? "Chapter");
 
     const sel = $("readerSelect") as HTMLSelectElement;
@@ -478,7 +479,7 @@ async function openReader(chapterId: string, id: string = currentComic): Promise
     if (requestId !== openReaderRequestId) return;
     $("readerTitle").textContent = "Failed to load this chapter.";
     ($("readerView").querySelector(".page") as HTMLElement).innerHTML =
-      '<div class="empty">Failed to load pages from MangaDex.</div>';
+      '<div class="empty">Failed to load pages from Komiku.</div>';
   }
 }
 function changeChapter(v: string): void {

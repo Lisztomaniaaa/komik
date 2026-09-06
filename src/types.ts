@@ -19,6 +19,11 @@ export interface ChapterEntry {
   label: string;
   chapterNumber: number | null;
   publishAt: string;
+  // The manga slug to use when fetching this chapter's pages. Usually equal
+  // to the comic's own id, but Komiku sometimes serves a title's chapters
+  // under a different slug than its detail page (e.g. detail page
+  // "komik-one-piece-indo" but chapters read under "one-piece").
+  readerSlug: string;
 }
 
 export type FilterKey = "type" | "genre" | "status";

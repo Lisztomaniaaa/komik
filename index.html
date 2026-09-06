@@ -88,11 +88,10 @@
 </section>
 
 <section id="exploreView" class="view">
-<div class="exploreHead"><div class="eyebrow">Discover</div><h1>Explore comics.</h1><p style="color:#888">Find something new by type, genre, status or popularity.</p></div>
+<div class="exploreHead"><div class="eyebrow">Discover</div><h1>Explore comics.</h1><p style="color:#888">Find something new by type and genre.</p></div>
 <div class="filterPanel">
-<div class="filterLine"><span class="filterLabel">Type</span><button class="filterBtn active" data-filter="type" data-value="All" onclick="filterBy('type','All')">All</button><button class="filterBtn" data-filter="type" data-value="Manga" onclick="filterBy('type','Manga')">Manga</button><button class="filterBtn" data-filter="type" data-value="Manhwa" onclick="filterBy('type','Manhwa')">Manhwa</button><button class="filterBtn" data-filter="type" data-value="Manhua" onclick="filterBy('type','Manhua')">Manhua</button><button class="filterBtn" data-filter="type" data-value="Webtoon" onclick="filterBy('type','Webtoon')">Webtoon</button></div>
-<div class="filterLine"><span class="filterLabel">Genre</span><button class="filterBtn active" data-filter="genre" data-value="All" onclick="filterBy('genre','All')">All</button><button class="filterBtn" data-filter="genre" data-value="Action" onclick="filterBy('genre','Action')">Action</button><button class="filterBtn" data-filter="genre" data-value="Romance" onclick="filterBy('genre','Romance')">Romance</button><button class="filterBtn" data-filter="genre" data-value="Fantasy" onclick="filterBy('genre','Fantasy')">Fantasy</button><button class="filterBtn" data-filter="genre" data-value="Comedy" onclick="filterBy('genre','Comedy')">Comedy</button><button class="filterBtn" data-filter="genre" data-value="Horror" onclick="filterBy('genre','Horror')">Horror</button></div>
-<div class="filterLine"><span class="filterLabel">Status</span><button class="filterBtn active" data-filter="status" data-value="All" onclick="filterBy('status','All')">All</button><button class="filterBtn" data-filter="status" data-value="Ongoing" onclick="filterBy('status','Ongoing')">Ongoing</button><button class="filterBtn" data-filter="status" data-value="Completed" onclick="filterBy('status','Completed')">Completed</button><select id="sortSelect" class="sortSelect" onchange="applyFilters()"><option value="latest">Latest update</option><option value="rating">Highest rating</option><option value="az">A–Z</option></select></div>
+<div class="filterLine"><span class="filterLabel">Type</span><button class="filterBtn active" data-filter="type" data-value="All" onclick="filterBy('type','All')">All</button><button class="filterBtn" data-filter="type" data-value="Manga" onclick="filterBy('type','Manga')">Manga</button><button class="filterBtn" data-filter="type" data-value="Manhwa" onclick="filterBy('type','Manhwa')">Manhwa</button><button class="filterBtn" data-filter="type" data-value="Manhua" onclick="filterBy('type','Manhua')">Manhua</button></div>
+<div class="filterLine"><span class="filterLabel">Genre</span><button class="filterBtn active" data-filter="genre" data-value="All" onclick="filterBy('genre','All')">All</button><button class="filterBtn" data-filter="genre" data-value="Action" onclick="filterBy('genre','Action')">Action</button><button class="filterBtn" data-filter="genre" data-value="Romance" onclick="filterBy('genre','Romance')">Romance</button><button class="filterBtn" data-filter="genre" data-value="Fantasy" onclick="filterBy('genre','Fantasy')">Fantasy</button><button class="filterBtn" data-filter="genre" data-value="Comedy" onclick="filterBy('genre','Comedy')">Comedy</button><button class="filterBtn" data-filter="genre" data-value="Horror" onclick="filterBy('genre','Horror')">Horror</button><select id="sortSelect" class="sortSelect" onchange="applyFilters()"><option value="latest">Latest update</option><option value="az">A–Z</option></select></div>
 </div>
 <div id="exploreGrid" class="grid"></div><div id="explorePagination" class="pagination"></div>
 </section>
@@ -195,7 +194,7 @@
 <a href="#" onclick="openFAQ();return false">FAQ</a>
 <a href="#" onclick="openAbout();return false">About</a>
 </div></div>
-<div class="footerBottom">© 2026 KomikVibe · Comic data is live from MangaDex. Accounts and comments are live via Firebase; library and reading progress are still stored locally on your device. <span id="buildVersion"></span></div>
+<div class="footerBottom">© 2026 KomikVibe · Comic data is live from Komiku. Accounts and comments are live via Firebase; library and reading progress are still stored locally on your device. <span id="buildVersion"></span></div>
 </div></footer>
 
 <div class="modal" id="loginModal"><div class="modalBox">

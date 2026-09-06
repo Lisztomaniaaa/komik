@@ -1,6 +1,6 @@
 # komik
 
-KomikVibe — comic reader frontend, data komik real dari MangaDex API.
+KomikVibe — comic reader frontend, data komik dari sebuah scraper Komiku self-hosted.
 
 ## Stack
 
@@ -10,15 +10,13 @@ TypeScript murni + Vite (tanpa framework seperti React/Vue). Struktur:
 index.html         markup halaman (semua view: home, explore, detail, reader, account, dst.)
 src/style.css       semua styling (dark theme)
 src/types.ts        tipe data (Comic, ChapterEntry, Filters, CommentRow, dll.)
-src/mangadex.ts      client API MangaDex — fetch, mapping ke tipe Comic, genre/type/status filter
+src/komiku.ts        client API Komiku — fetch, mapping ke tipe Comic, genre/type filter
 src/firebase.ts       init Firebase app dari env var (dipakai bareng oleh auth.ts & comments.ts)
 src/auth.ts           login/signup/logout via Firebase Authentication (email & password)
 src/comments.ts       fetch/post komentar & review ke Firestore — lihat "Setup Firebase" di bawah
 src/app.ts           seluruh logic aplikasi (navigasi, filter, reader, login, dsb.)
 src/uiChrome.ts       perilaku menu mobile/drawer
 src/main.ts           entry point, cuma import file-file di atas
-vite.config.ts        proxy /mdx -> api.mangadex.org, proxy /api/img -> gambar MangaDex (lihat di bawah)
-api/img.ts            versi Vercel (edge function) dari proxy gambar di atas
 firestore.rules        security rules Firestore — tinggal paste ke Firebase Console
 ```
 
@@ -35,53 +33,50 @@ npm run build     # build production ke dist/
 npm run preview   # jalankan hasil build production
 ```
 
-## Sumber data: MangaDex API
+## Sumber data: Komiku (scraper self-hosted)
 
-Awalnya dicoba scraper komikcast (komik Indo asli), tapi:
-- Situsnya sendiri bajakan (risiko hukum untuk dijalankan/di-deploy).
-- Dua instance publik scraper yang dicoba (`komikcast-api.vercel.app`,
-  `komiku-api.fly.dev`) sudah mati — bukti nyata betapa rapuhnya API unofficial.
+Awalnya dicoba scraper Komikcast, lalu MangaDex API, lalu API publik
+`komiku-rest-api.vercel.app` (fork dari
+[VernSG/Komiku-Rest-Api](https://github.com/VernSG/Komiku-Rest-Api)) — instance
+publiknya sendiri sudah mati (402 Payment Required dari Vercel milik pembuatnya),
+jadi kodenya di-fork dan di-deploy ulang sendiri.
 
-Jadi dipindah ke [MangaDex API](https://api.mangadex.org/docs/) — resmi, gratis,
-dan sudah diverifikasi jalan. Trade-off yang perlu diketahui:
+**Catatan penting soal legalitas**: Komiku.org adalah situs aggregator
+scanlation tanpa lisensi resmi dari penerbit. Ini keputusan sadar pemilik
+project — bukan sesuatu yang direkomendasikan secara default. Kalau butuh
+sumber data yang benar-benar legal, MangaDex API (yang dipakai project ini
+sebelumnya) adalah alternatif resmi dan gratis.
 
-- Kontennya scanlation komunitas (bukan situs komik Indo asli). Sebagian
-  deskripsi ada terjemahan Bahasa Indonesia, sebagian fallback ke Inggris.
-- MangaDex tidak punya field "type" (Manga/Manhwa/Manhua/Webtoon) langsung —
-  ini didapat dari heuristik: `originalLanguage` (ja/ko/zh) + tag "Long Strip"
-  untuk Webtoon. Lihat `deriveType()` di `src/mangadex.ts`.
-- Filter genre di UI (Action/Romance/Fantasy/Comedy/Horror/Adventure/Drama)
-  dipetakan ke tag UUID MangaDex secara manual di `GENRE_TAG_IDS`.
-- Rating (skala 0-10 MangaDex, ditampilkan /2) dan jumlah pembaca (follows)
-  butuh panggilan terpisah ke `/statistics/manga` — dibatch per halaman hasil,
-  bukan per-card, supaya tidak N+1 request.
+Trade-off teknis dari pindah ke scraper HTML (dibanding API resmi seperti
+MangaDex):
+- **Gampang rusak**: kalau komiku.org ubah struktur HTML-nya, endpoint yang
+  bergantung pada CSS selector tertentu (lihat `controllers/*.js` di repo
+  scraper) bisa berhenti mengembalikan data tanpa peringatan apapun.
+- **Tidak ada rating/jumlah pembaca**: komiku.org tidak punya sistem rating
+  publik yang bisa di-scrape, jadi `Comic.rating` selalu `0` — lihat
+  `NO_RATING` di `src/komiku.ts`.
+- **Filter lebih terbatas**: tidak ada filter status (Ongoing/Completed) atau
+  sort-by-rating di level listing (data itu cuma ada di halaman detail per
+  komik, bukan di halaman daftar) — Explore cuma punya filter Type + Genre.
+- **Paginasi perkiraan**: endpoint Komiku tidak mengembalikan total item
+  pasti, cuma sinyal "ada halaman berikutnya atau tidak" — jumlah halaman di
+  UI adalah estimasi, bukan angka pasti seperti MangaDex.
+- Tipe komik (Manga/Manhwa/Manhua) dan genre didapat langsung dari field yang
+  di-scrape, tidak perlu heuristik/tabel mapping seperti waktu masih pakai
+  MangaDex.
 
-### Kenapa ada proxy (`/mdx` di vite.config.ts)
+### API scraper terpisah dari app ini
 
-`api.mangadex.org` tidak mengirim header `Access-Control-Allow-Origin`, jadi
-fetch langsung dari browser diblokir CORS (sudah diverifikasi langsung: request
-sukses di curl tapi gagal dengan "Failed to fetch" dari dalam browser). Vite's
-dev/preview proxy meneruskan `/mdx/*` ke `https://api.mangadex.org/*` supaya
-browser menganggapnya same-origin.
+`src/komiku.ts` memanggil `VITE_KOMIKU_API_BASE` (default:
+`https://komiku-rest-api-selfhost.vercel.app`) — sebuah deployment Vercel
+**terpisah**, bukan bagian dari project `komik` ini. API itu sudah mengirim
+header `Access-Control-Allow-Origin: *` dan punya `/image-proxy` sendiri
+untuk gambar, jadi app ini tidak butuh proxy `/mdx` atau `/api/img` seperti
+waktu masih pakai MangaDex.
 
-**Ini cuma jalan untuk `npm run dev` dan `npm run preview`.** Untuk deploy di
-Vercel, `vercel.json` di root sudah berisi rewrite rule yang setara
-(`/mdx/:path*` -> `https://api.mangadex.org/:path*`) — otomatis aktif begitu
-Vercel build & deploy ulang. Kalau pindah ke hosting lain (Netlify/GitHub
-Pages/dst.), perlu rule proxy/redirect yang setara di sana juga; GitHub Pages
-khususnya tidak bisa proxy sama sekali (statis murni), jadi butuh proxy
-terpisah (misalnya Cloudflare Worker) kalau mau dipakai di situ.
-
-### Kenapa ada proxy gambar juga (`/api/img`)
-
-Gambar cover & halaman komik diambil dari domain lain lagi
-(`uploads.mangadex.org`, dan `*.mangadex.network` yang beda-beda tiap
-chapter). Sebagian jaringan/ISP memblokir domain-domain ini secara khusus
-walau `api.mangadex.org` sendiri bisa diakses — jadi datanya muncul tapi
-semua gambar gagal. `api/img.ts` (Vercel edge function) dan middleware dev
-di `vite.config.ts` ambil gambarnya di sisi server lalu diteruskan ke
-browser, sama seperti `/mdx` tapi untuk gambar. Karena host halaman chapter
-berubah-ubah per request, ini butuh function beneran, bukan rewrite statis.
+Kalau API itu mati (limit Vercel gratis gampang kena kalau traffic naik —
+persis ini yang bikin instance publik aslinya mati), sumber data ikut mati
+sampai di-deploy ulang secara manual — tidak ada fallback otomatis.
 
 ## Setup Firebase (login & komentar/review)
 
@@ -139,11 +134,13 @@ JS, bukan di query, supaya nol langkah index manual di Firebase Console.
 
 ## Catatan lain
 
-- Chapter cuma dari `translatedLanguage=id`, fallback ke `en` kalau komiknya
-  belum ada versi Indonesia.
+- Komiku.org sudah bahasa Indonesia dari sananya, jadi tidak ada logic
+  fallback bahasa seperti waktu masih pakai MangaDex.
 - Login sudah live lewat Firebase Authentication (email & password, lihat
-  "Setup Firebase" di atas). Follow dan reading-progress masih 100% lokal
-  (localStorage per browser) — belum ada backend buat itu. Komentar/review
-  sudah live lewat Firebase; data komik sudah live lewat MangaDex.
+  "Setup Firebase" di atas) — Follow butuh login (redirect otomatis ke form
+  login kalau belum masuk), tapi datanya sendiri masih 100% lokal
+  (localStorage per browser), begitu juga reading-progress — belum ada
+  backend buat itu. Komentar/review sudah live lewat Firebase; data komik
+  sudah live lewat Komiku (lihat "Sumber data" di atas).
 - Progress baca (`panpan-progress` di localStorage) dipakai buat mengisi
   section "Continue reading" di homepage dan tab History di Account.
