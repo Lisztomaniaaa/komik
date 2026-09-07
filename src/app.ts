@@ -782,13 +782,18 @@ async function rateComic(stars: number): Promise<void> {
     toast("Ratings aren't set up yet.");
     return;
   }
+  // Light up 1..stars immediately on tap instead of waiting on the round
+  // trip to Firestore — the stars should never look like only the tapped
+  // one reacted just because the save is still in flight (or slow).
+  renderRatingStars(stars);
   try {
     const { submitRating } = await import("./ratings");
     await submitRating(currentComic, currentUser!.uid, stars);
     toast("Thanks for rating!");
     loadRatingSummary(currentComic);
   } catch {
-    toast("Couldn't save your rating, try again.");
+    toast("Couldn't save your rating — check your connection and try again.");
+    loadRatingSummary(currentComic);
   }
 }
 function commentHtml(row: CommentRow): string {
