@@ -108,7 +108,13 @@ footer{border-top:1px solid var(--line);padding:34px 0;color:#666;font-size:12px
  .login{min-width:100px}
 }
 
-@media(max-width:900px){.navlinks{display:none}.search{width:170px}.grid{grid-template-columns:repeat(3,minmax(0,1fr))}.detailHero{grid-template-columns:190px 1fr}.readerLayout{grid-template-columns:1fr}.readerSide{display:none}.accountLayout{grid-template-columns:1fr}.accountSide{display:block}}
+@media(max-width:900px){.navlinks{display:none}.search{width:170px}.grid{grid-template-columns:repeat(3,minmax(0,1fr))}.detailHero{grid-template-columns:190px 1fr}.readerLayout{grid-template-columns:1fr}.readerSide{display:none}.accountLayout{grid-template-columns:1fr}.accountSide{display:block}
+/* On the single-column reader layout (no chapter sidebar), the page image
+   should read edge-to-edge like a real comic reader — not sit inside the
+   site's normal .container gutters, which are what were leaving empty
+   space on both sides no matter how wide .comicPage itself was set. */
+.page{width:100vw;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);border-radius:0}
+}
 .mobileSearchBtn{display:none}
 @media(max-width:620px){
  .container{width:calc(100% - 40px)}.topbar{height:64px}.search{display:none}.mobilemenu{display:block}.logo{font-size:20px}
@@ -209,7 +215,7 @@ body.light .ratingSummary{background:#fff}
  .readerTop h2{font-size:22px;grid-column:1/-1;margin:4px 0 4px}
  .readerTop .select{min-width:0;width:100%}
  .readerLayout{display:block}
- .page{border-radius:12px}
+ .page{border-radius:0}
  .readerNav{gap:8px}
  .readerNav button{min-height:46px}
  .readerComments{margin-top:36px}

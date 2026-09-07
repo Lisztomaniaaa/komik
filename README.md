@@ -197,8 +197,19 @@ supaya collection `ratings` ikut ke-cover.
   + riwayat baca) berdiri sendiri tanpa sidebar akun sama sekali. Sidebar
   akun sendiri juga tidak lagi menampilkan badge role ("READER") — sudah
   dihapus karena tidak dipakai untuk apa-apa.
-- Reader (halaman baca chapter) sekarang benar-benar full-width, tidak ada
-  lagi ruang kosong di kiri-kanan gambar komik.
+- Reader (halaman baca chapter) sekarang benar-benar full-bleed di layar
+  sempit (≤900px, tempat sidebar chapter disembunyikan): `.page` dibuat
+  selebar viewport (`100vw`) dan dilepas dari padding `.container` situs,
+  bukan cuma "100% dari kontainer yang masih ada paddingnya" seperti
+  sebelumnya — itu sebabnya dulu masih ada ruang kosong kiri-kanan walau
+  `.comicPage` sendiri sudah `width:100%`.
+- Tap-to-rate sekarang optimistic: begitu ditekan, bintang 1..N langsung
+  menyala di layar tanpa nunggu balasan Firestore — sebelumnya bintang baru
+  ke-update setelah `loadRatingSummary` selesai fetch ulang, jadi kalau
+  koneksi lambat (atau gagal karena rules Firestore belum di-publish ulang,
+  lihat "Rating komik" di atas) keliatannya cuma bintang yang dipencet yang
+  bereaksi. Kalau simpan-nya gagal, tampilan dikembalikan sesuai data
+  server yang sebenarnya begitu diketahui.
 - Jumlah chapter di halaman detail komik dulu bisa salah nampilin "0" kalau
   chapter terbaru itu kebetulan "Chapter 0" (prolog) — nomor chapter
   ke-tertukar sama jumlah chapter. Sudah diperbaiki, sekarang selalu pakai
