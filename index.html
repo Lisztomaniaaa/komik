@@ -29,108 +29,107 @@
 <div class="container nav">
 <a class="logo" href="#" onclick="goHome();return false"><img src="/logo-mark.png" alt="" class="logoMark">Komik<b>Vibe</b></a>
 <nav class="navlinks">
-<a id="navHome" class="active" href="#" onclick="goHome();return false">Home</a>
-<a id="navExplore" href="#" onclick="showExplore();return false">Explore</a>
-<a href="#latest" onclick="goHome();setTimeout(()=>document.getElementById('latest').scrollIntoView({behavior:'smooth'}),30);return false">Latest</a>
-<a href="#genres" onclick="goHome();setTimeout(()=>document.getElementById('genres').scrollIntoView({behavior:'smooth'}),30);return false">Genres</a>
+<a id="navHome" class="active" href="#" onclick="goHome();return false" data-i18n="nav_home">Home</a>
+<a id="navExplore" href="#" onclick="showExplore();return false" data-i18n="nav_explore">Explore</a>
+<a href="#latest" onclick="goHome();setTimeout(()=>document.getElementById('latest').scrollIntoView({behavior:'smooth'}),30);return false" data-i18n="nav_latest">Latest</a>
+<a href="#genres" onclick="goHome();setTimeout(()=>document.getElementById('genres').scrollIntoView({behavior:'smooth'}),30);return false" data-i18n="nav_genres">Genres</a>
 </nav>
 <div class="actions">
-<div class="searchWrap" id="searchWrap"><label class="search"><svg class="svgIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg><input id="search" placeholder="Search comics..." autocomplete="off"></label><div id="searchResults" class="searchResults"></div></div>
-<button class="iconbtn iconOnly mobileSearchBtn" onclick="toggleMobileSearch()" title="Search" aria-label="Search"><svg class="svgIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg></button>
-<button class="iconbtn iconOnly themeHeaderBtn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme"><svg class="svgIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 15.2A8.5 8.5 0 0 1 8.8 3.5 8.5 8.5 0 1 0 20.5 15.2Z"></path></svg></button>
+<div class="searchWrap" id="searchWrap"><label class="search"><svg class="svgIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg><input id="search" placeholder="Search comics..." autocomplete="off" data-i18n-placeholder="search_placeholder"></label><div id="searchResults" class="searchResults"></div></div>
+<button class="iconbtn iconOnly mobileSearchBtn" onclick="toggleMobileSearch()" title="Search" aria-label="Search" data-i18n-title="search_aria"><svg class="svgIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg></button>
+<button class="iconbtn iconOnly themeHeaderBtn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme" data-i18n-title="theme_aria"><svg class="svgIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 15.2A8.5 8.5 0 0 1 8.8 3.5 8.5 8.5 0 1 0 20.5 15.2Z"></path></svg></button>
+<button class="iconbtn langBtn" id="langBtn" onclick="toggleLang()" title="Ganti bahasa" aria-label="Ganti bahasa" data-i18n-title="lang_aria">ID</button>
 <button id="loginBtn" class="login" onclick="openLogin()">Login</button>
-<button id="mobileMenuBtn" class="iconbtn iconOnly mobilemenu" onclick="toggleMobileMenu()" title="Menu" aria-label="Open menu"><svg class="svgIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg></button>
+<button id="mobileMenuBtn" class="iconbtn iconOnly mobilemenu" onclick="toggleMobileMenu()" title="Menu" aria-label="Open menu" data-i18n-title="menu_aria"><svg class="svgIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg></button>
 </div>
 </div>
 </header>
 <div id="mobileDrawer" class="mobileDrawer" aria-hidden="true">
-<div class="drawerTitle"><span>MENU</span><small>KomikVibe</small></div>
-<a href="#" onclick="goHome();closeMobileMenu();return false"><svg class="drawerIcon svgIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg><span class="drawerLabel">Home</span></a>
-<a href="#" onclick="showExplore();closeMobileMenu();return false"><svg class="drawerIcon svgIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg><span class="drawerLabel">Explore</span></a>
-<a href="#" onclick="goHome();closeMobileMenu();setTimeout(()=>document.getElementById('latest').scrollIntoView({behavior:'smooth'}),30);return false"><svg class="drawerIcon svgIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"></path></svg><span class="drawerLabel">Latest</span></a>
-<a href="#" onclick="goHome();closeMobileMenu();setTimeout(()=>document.getElementById('genres').scrollIntoView({behavior:'smooth'}),30);return false"><svg class="drawerIcon svgIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16"></path><circle cx="8" cy="5" r="1.5"></circle><circle cx="15" cy="12" r="1.5"></circle><circle cx="10" cy="19" r="1.5"></circle></svg><span class="drawerLabel">Genres</span></a>
-<a href="#" onclick="openAccount();closeMobileMenu();return false"><svg class="drawerIcon svgIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg><span class="drawerLabel">Account</span></a>
+<div class="drawerTitle"><span data-i18n="drawer_menu">MENU</span><small>KomikVibe</small></div>
+<a href="#" onclick="goHome();closeMobileMenu();return false"><svg class="drawerIcon svgIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg><span class="drawerLabel" data-i18n="nav_home">Home</span></a>
+<a href="#" onclick="showExplore();closeMobileMenu();return false"><svg class="drawerIcon svgIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg><span class="drawerLabel" data-i18n="nav_explore">Explore</span></a>
+<a href="#" onclick="goHome();closeMobileMenu();setTimeout(()=>document.getElementById('latest').scrollIntoView({behavior:'smooth'}),30);return false"><svg class="drawerIcon svgIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"></path></svg><span class="drawerLabel" data-i18n="nav_latest">Latest</span></a>
+<a href="#" onclick="goHome();closeMobileMenu();setTimeout(()=>document.getElementById('genres').scrollIntoView({behavior:'smooth'}),30);return false"><svg class="drawerIcon svgIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16"></path><circle cx="8" cy="5" r="1.5"></circle><circle cx="15" cy="12" r="1.5"></circle><circle cx="10" cy="19" r="1.5"></circle></svg><span class="drawerLabel" data-i18n="nav_genres">Genres</span></a>
+<a href="#" onclick="openAccount();closeMobileMenu();return false"><svg class="drawerIcon svgIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg><span class="drawerLabel" data-i18n="nav_account">Account</span></a>
 </div>
 
 <nav class="bottomNav" id="bottomNav" aria-label="Primary">
-<button class="bottomNavItem active" data-nav="home" onclick="goHome()"><svg class="svgIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg><span>Home</span></button>
-<button class="bottomNavItem" data-nav="explore" onclick="showExplore()"><svg class="svgIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg><span>Explore</span></button>
-<button class="bottomNavItem" data-nav="library" onclick="openAccount('library')"><svg class="svgIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12a1 1 0 0 1 1 1v16l-7-4-7 4V4a1 1 0 0 1 1-1Z"></path></svg><span>Library</span></button>
-<button class="bottomNavItem" data-nav="account" onclick="openAccount('overview')"><svg class="svgIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg><span>Account</span></button>
+<button class="bottomNavItem active" data-nav="home" onclick="goHome()"><svg class="svgIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg><span data-i18n="nav_home">Home</span></button>
+<button class="bottomNavItem" data-nav="explore" onclick="showExplore()"><svg class="svgIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg><span data-i18n="nav_explore">Explore</span></button>
+<button class="bottomNavItem" data-nav="library" onclick="openAccount('library')"><svg class="svgIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12a1 1 0 0 1 1 1v16l-7-4-7 4V4a1 1 0 0 1 1-1Z"></path></svg><span data-i18n="nav_library">Library</span></button>
+<button class="bottomNavItem" data-nav="account" onclick="openAccount('overview')"><svg class="svgIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg><span data-i18n="nav_account">Account</span></button>
 </nav>
 
 <main class="container">
 
 <section id="homeView" class="view active">
 <div class="hero"><div class="heroart"></div><div class="heroContent">
-<div class="eyebrow">Read your next story</div>
-<h1>Dive into <span>epic worlds.</span></h1>
-<p>Discover manga, manhwa and webcomics in one clean reading experience. Follow new chapters, save favorites and keep reading wherever you are.</p>
-<div class="btnrow"><button class="primary" onclick="startReading()">Start reading →</button><button class="secondary" onclick="showExplore()">Explore now</button></div>
+<div class="eyebrow" data-i18n="hero_eyebrow">Read your next story</div>
+<h1><span data-i18n="hero_title_pre">Dive into </span><span data-i18n="hero_title_span">epic worlds.</span></h1>
+<p data-i18n="hero_desc">Discover manga, manhwa and webcomics in one clean reading experience. Follow new chapters, save favorites and keep reading wherever you are.</p>
+<div class="btnrow"><button class="primary" onclick="startReading()" data-i18n="hero_start">Start reading →</button><button class="secondary" onclick="showExplore()" data-i18n="hero_explore">Explore now</button></div>
 </div></div>
 
-<section class="section"><div class="sectionHead"><h2>Trending today</h2><a href="#" onclick="showExplore();return false">View all →</a></div>
+<section class="section"><div class="sectionHead"><h2 data-i18n="trending_today">Trending today</h2><a href="#" onclick="showExplore();return false" data-i18n="view_all">View all →</a></div>
 <div id="trendingTodayTrack" class="grid"></div><div id="trendingTodayPagination" class="pagination"></div></section>
 
-<section class="section"><div class="sectionHead"><h2>Continue reading</h2><a href="#" onclick="openAccount('history');return false">History →</a></div>
+<section class="section"><div class="sectionHead"><h2 data-i18n="continue_reading">Continue reading</h2><a href="#" onclick="openAccount('library');return false" data-i18n="library_link">Library →</a></div>
 <div id="continueReading" class="list"></div></section>
 
-<section class="section" id="latest"><div class="sectionHead"><h2>Latest updates</h2><a href="#" onclick="showExplore();return false">View all →</a></div>
+<section class="section" id="latest"><div class="sectionHead"><h2 data-i18n="latest_updates">Latest updates</h2><a href="#" onclick="showExplore();return false" data-i18n="view_all">View all →</a></div>
 <div class="genres" id="latestTypeFilter">
-<span class="genre active" onclick="setLatestType('All',this)">All</span><span class="genre" onclick="setLatestType('Manga',this)">Manga</span><span class="genre" onclick="setLatestType('Manhwa',this)">Manhwa</span><span class="genre" onclick="setLatestType('Manhua',this)">Manhua</span>
+<span class="genre active" onclick="setLatestType('All',this)" data-i18n="filter_all">All</span><span class="genre" onclick="setLatestType('Manga',this)">Manga</span><span class="genre" onclick="setLatestType('Manhwa',this)">Manhwa</span><span class="genre" onclick="setLatestType('Manhua',this)">Manhua</span>
 </div>
 <div id="latestGrid" class="grid"></div><div id="latestPagination" class="pagination"></div></section>
 
 <section class="section" id="genres">
-<div class="sectionHead"><h2>Browse by genre</h2><a href="#" onclick="showExplore();return false">Explore all →</a></div>
+<div class="sectionHead"><h2 data-i18n="browse_genre">Browse by genre</h2><a href="#" onclick="showExplore();return false" data-i18n="explore_all">Explore all →</a></div>
 <div class="genres" id="homeGenres">
-<span class="genre active" onclick="setHomeGenre('All',this)">All</span>
+<span class="genre active" onclick="setHomeGenre('All',this)" data-i18n="filter_all">All</span>
 </div>
 <div id="genreResults" class="grid genreResults"></div><div id="genrePagination" class="pagination"></div>
 </section>
 
-<section class="section"><div class="sectionHead"><h2>Top trending</h2><a href="#" onclick="showExplore();return false">View all →</a></div>
+<section class="section"><div class="sectionHead"><h2 data-i18n="top_trending">Top trending</h2><a href="#" onclick="showExplore();return false" data-i18n="view_all">View all →</a></div>
 <div id="trendingGrid" class="grid"></div><div id="trendingPagination" class="pagination"></div></section>
 </section>
 
 <section id="exploreView" class="view">
-<div class="exploreHead"><div class="eyebrow">Discover</div><h1>Explore comics.</h1><p style="color:#888">Find something new by type and genre.</p></div>
+<div class="exploreHead"><div class="eyebrow" data-i18n="discover_eyebrow">Discover</div><h1 data-i18n="discover_title">Explore comics.</h1><p style="color:#888" data-i18n="discover_desc">Find something new by type and genre.</p></div>
 <div class="filterPanel">
-<div class="filterLine"><span class="filterLabel">Type</span><button class="filterBtn active" data-filter="type" data-value="All" onclick="filterBy('type','All')">All</button><button class="filterBtn" data-filter="type" data-value="Manga" onclick="filterBy('type','Manga')">Manga</button><button class="filterBtn" data-filter="type" data-value="Manhwa" onclick="filterBy('type','Manhwa')">Manhwa</button><button class="filterBtn" data-filter="type" data-value="Manhua" onclick="filterBy('type','Manhua')">Manhua</button></div>
-<div class="filterLine"><span class="filterLabel">Genre</span><div id="exploreGenreButtons" class="filterBtnGroup"><button class="filterBtn active" data-filter="genre" data-value="All" onclick="filterBy('genre','All')">All</button></div><select id="sortSelect" class="sortSelect" onchange="applyFilters()"><option value="latest">Latest update</option><option value="az">A–Z</option></select></div>
+<div class="filterLine"><span class="filterLabel" data-i18n="filter_type">Type</span><button class="filterBtn active" data-filter="type" data-value="All" onclick="filterBy('type','All')" data-i18n="filter_all">All</button><button class="filterBtn" data-filter="type" data-value="Manga" onclick="filterBy('type','Manga')">Manga</button><button class="filterBtn" data-filter="type" data-value="Manhwa" onclick="filterBy('type','Manhwa')">Manhwa</button><button class="filterBtn" data-filter="type" data-value="Manhua" onclick="filterBy('type','Manhua')">Manhua</button></div>
+<div class="filterLine"><span class="filterLabel" data-i18n="filter_genre">Genre</span><div id="exploreGenreButtons" class="filterBtnGroup"><button class="filterBtn active" data-filter="genre" data-value="All" onclick="filterBy('genre','All')" data-i18n="filter_all">All</button></div><select id="sortSelect" class="sortSelect" onchange="applyFilters()"><option value="latest" data-i18n="sort_latest">Latest update</option><option value="az" data-i18n="sort_az">A–Z</option></select></div>
 </div>
 <div id="exploreGrid" class="grid"></div><div id="explorePagination" class="pagination"></div>
 </section>
 
 <section id="detailView" class="view">
-<div class="detail"><button class="back" onclick="goBackFromDetail()"><svg class="svgIcon" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"></path></svg><span>Back</span></button>
-<div class="detailHero"><div class="detailCover" id="detailCover"></div><div class="detailIntro"><div class="eyebrow" id="detailGenre">ACTION · FANTASY</div><h1 id="detailTitle">Solo Leveling</h1><p id="detailDesc"></p><div class="chips" id="detailChips"></div><div class="stats"><div><b id="detailRating">4.9</b>Rating</div><div><b id="detailChapters">200</b>Chapters</div><div><b id="detailReaders">12.4K</b>Readers</div></div><button id="followBtn" class="secondary followBtn" onclick="toggleFollow()">Follow</button></div></div>
-<div class="ratingSummary"><div><div class="ratingBig" id="detailRatingBig">4.9</div><div class="ratingStars">★★★★★</div></div><div><strong>Reader rating</strong><div class="ratingMeta"><span id="detailRatingCount">2,481</span> ratings · Community score</div></div></div>
-<div class="chapterBox"><div class="sectionHead"><h2>Chapters</h2><span style="color:#777;font-size:12px">Latest first</span></div><div id="chapterList"></div></div>
-<div class="comments"><div class="sectionHead"><h2>Comments & reviews</h2><span style="color:#777;font-size:12px">Reader discussion</span></div><div class="commentGrid" id="detailComments"></div><div class="loadMoreWrap"><button class="loadMoreBtn" onclick="loadMoreComments('detailComments')">Load more comments</button></div>
-<div class="reviewForm"><b>Leave a review.</b><textarea id="detailComment" placeholder="Write your experience..."></textarea><button class="primary" onclick="submitComment('detail')">Post review</button></div>
+<div class="detail"><button class="back" onclick="goBackFromDetail()"><svg class="svgIcon" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"></path></svg><span data-i18n="back">Back</span></button>
+<div class="detailHero"><div class="detailCover" id="detailCover"></div><div class="detailIntro"><div class="eyebrow" id="detailGenre">ACTION · FANTASY</div><h1 id="detailTitle">Solo Leveling</h1><p id="detailDesc"></p><div class="chips" id="detailChips"></div><div class="stats"><div><b id="detailRating">4.9</b><span data-i18n="stat_rating">Rating</span></div><div><b id="detailChapters">200</b><span data-i18n="stat_chapters">Chapters</span></div><div><b id="detailReaders">12.4K</b><span data-i18n="stat_readers">Readers</span></div></div><button id="followBtn" class="secondary followBtn" onclick="toggleFollow()" data-i18n="follow">Follow</button></div></div>
+<div class="ratingSummary"><div><div class="ratingBig" id="detailRatingBig">–</div><div class="ratingStars" id="detailRatingStars" role="group" aria-label="Rate this comic"><button type="button" class="starBtn" data-star="1" onclick="rateComic(1)">★</button><button type="button" class="starBtn" data-star="2" onclick="rateComic(2)">★</button><button type="button" class="starBtn" data-star="3" onclick="rateComic(3)">★</button><button type="button" class="starBtn" data-star="4" onclick="rateComic(4)">★</button><button type="button" class="starBtn" data-star="5" onclick="rateComic(5)">★</button></div></div><div><strong data-i18n="reader_rating">Reader rating</strong><div class="ratingMeta"><span id="detailRatingCount">0</span> <span data-i18n="rating_unit">ratings</span> · <span data-i18n="rating_tap_hint">Tap a star to rate</span></div></div></div>
+<div class="chapterBox"><div class="sectionHead"><h2 data-i18n="chapters_heading">Chapters</h2><span style="color:#777;font-size:12px" data-i18n="chapters_latest_first">Latest first</span></div><div id="chapterList"></div></div>
+<div class="comments"><div class="sectionHead"><h2 data-i18n="comments_reviews">Comments & reviews</h2><span style="color:#777;font-size:12px" data-i18n="reader_discussion">Reader discussion</span></div><div class="commentGrid" id="detailComments"></div><div class="loadMoreWrap"><button class="loadMoreBtn" onclick="loadMoreComments('detailComments')" data-i18n="load_more_comments">Load more comments</button></div>
+<div class="reviewForm"><b data-i18n="leave_review">Leave a review.</b><textarea id="detailComment" placeholder="Write your experience..." data-i18n-placeholder="review_placeholder"></textarea><button class="primary" onclick="submitComment('detail')" data-i18n="post_review">Post review</button></div>
 </div></div></section>
 
 <section id="readerView" class="view">
-<div class="reader"><button class="back" onclick="history.back()"><svg class="svgIcon" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"></path></svg><span>Back</span> to comic</button>
+<div class="reader"><button class="back" onclick="history.back()"><svg class="svgIcon" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"></path></svg><span data-i18n="back">Back</span> <span data-i18n="back_to_comic">to comic</span></button>
 <div class="readerTop" style="margin-top:24px"><h2 id="readerTitle">Solo Leveling · Chapter 200</h2><select class="select" id="readerSelect" onchange="changeChapter(this.value)"></select></div>
-<div class="readerProgress"><span id="readerProgressBar"></span></div><div class="readerLayout"><div><div class="page"><div class="comicPage"><div class="speech">ARISE.</div></div></div><div class="readerNav"><button onclick="prevChapter()"><svg class="svgIcon" viewBox="0 0 24 24"><path d="M15 18 9 12l6-6"></path></svg><span>Prev</span></button><button onclick="history.back()"><svg class="svgIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"></path></svg><span>List</span></button><button onclick="nextChapter()"><span>Next</span><svg class="svgIcon" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></svg></button></div></div><aside class="readerSide"><h3>Chapters</h3><div id="readerChapters"></div></aside></div>
-<div class="comments readerComments"><div class="sectionHead"><h2>Chapter comments</h2><span style="color:#777;font-size:12px">Discuss this chapter</span></div><div class="commentGrid" id="readerComments"></div><div class="loadMoreWrap"><button class="loadMoreBtn" onclick="loadMoreComments('readerComments')">Load more comments</button></div>
-<div class="reviewForm"><b>Leave a comment.</b><textarea id="readerComment" placeholder="Write about this chapter..."></textarea><button class="primary" onclick="submitComment('reader')">Post comment</button></div></div>
+<div class="readerProgress"><span id="readerProgressBar"></span></div><div class="readerLayout"><div><div class="page"><div class="comicPage"><div class="speech">ARISE.</div></div></div><div class="readerNav"><button onclick="prevChapter()"><svg class="svgIcon" viewBox="0 0 24 24"><path d="M15 18 9 12l6-6"></path></svg><span data-i18n="prev">Prev</span></button><button onclick="history.back()"><svg class="svgIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"></path></svg><span data-i18n="list_label">List</span></button><button onclick="nextChapter()"><span data-i18n="next">Next</span><svg class="svgIcon" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></svg></button></div></div><aside class="readerSide"><h3 data-i18n="chapters_heading">Chapters</h3><div id="readerChapters"></div></aside></div>
+<div class="comments readerComments"><div class="sectionHead"><h2 data-i18n="chapter_comments">Chapter comments</h2><span style="color:#777;font-size:12px" data-i18n="discuss_chapter">Discuss this chapter</span></div><div class="commentGrid" id="readerComments"></div><div class="loadMoreWrap"><button class="loadMoreBtn" onclick="loadMoreComments('readerComments')" data-i18n="load_more_comments">Load more comments</button></div>
+<div class="reviewForm"><b data-i18n="leave_comment">Leave a comment.</b><textarea id="readerComment" placeholder="Write about this chapter..." data-i18n-placeholder="comment_placeholder"></textarea><button class="primary" onclick="submitComment('reader')" data-i18n="post_comment">Post comment</button></div></div>
 </div></section>
 
 <section id="accountView" class="view">
-<div class="account"><div class="eyebrow">Account center</div><h1 style="font-size:54px;margin-bottom:8px">Your account.</h1><p style="color:#888">Manage your profile, library, reading history and preferences.</p>
+<div class="account"><div class="eyebrow" data-i18n="account_center">Account center</div><h1 style="font-size:54px;margin-bottom:8px" data-i18n="account_title">Your account.</h1><p style="color:#888" data-i18n="account_desc">Manage your profile, library, reading history and preferences.</p>
 <div class="accountLayout">
-<aside class="accountSide"><div class="avatar" id="accountAvatar">R</div><h3 id="accountName">Reader</h3><small id="accountEmail">—</small><div class="role">READER</div><div class="accountTabs">
-<button class="accountTab active" data-tab="overview" onclick="accountTab('overview')">Overview</button>
-<button class="accountTab" data-tab="library" onclick="accountTab('library')">My library</button>
-<button class="accountTab" data-tab="history" onclick="accountTab('history')">Reading history</button>
-<button class="accountTab" data-tab="profile" onclick="accountTab('profile')">Profile</button>
-<button class="accountTab" data-tab="notifications" onclick="accountTab('notifications')">Notifications</button>
-<button class="accountTab" data-tab="settings" onclick="accountTab('settings')">Settings</button>
-<button class="accountTab" data-tab="security" onclick="accountTab('security')">Security</button>
-<button class="accountTab" onclick="logout()">Log out</button>
+<aside class="accountSide"><div class="avatar" id="accountAvatar">R</div><h3 id="accountName">Reader</h3><small id="accountEmail">—</small><div class="accountTabs">
+<button class="accountTab active" data-tab="overview" onclick="accountTab('overview')" data-i18n="tab_overview">Overview</button>
+<button class="accountTab" data-tab="library" onclick="accountTab('library')" data-i18n="tab_library">My library</button><button class="accountTab" data-tab="profile" onclick="accountTab('profile')" data-i18n="tab_profile">Profile</button>
+<button class="accountTab" data-tab="notifications" onclick="accountTab('notifications')" data-i18n="tab_notifications">Notifications</button>
+<button class="accountTab" data-tab="settings" onclick="accountTab('settings')" data-i18n="tab_settings">Settings</button>
+<button class="accountTab" data-tab="security" onclick="accountTab('security')" data-i18n="tab_security">Security</button>
+<button class="accountTab" onclick="logout()" data-i18n="logout">Log out</button>
 </div></aside>
 <div class="accountPanel" id="accountPanel"></div>
 </div></div>
@@ -189,16 +188,16 @@
 </section>
 
 <footer><div class="container">
-<div class="footerTop"><div><strong class="footerLogo">Komik<span>Vibe</span></strong><p>Read. Discover. Follow your next story.</p></div>
+<div class="footerTop"><div><strong class="footerLogo">Komik<span>Vibe</span></strong><p data-i18n="footer_tagline">Read. Discover. Follow your next story.</p></div>
 <div class="footerLinks">
-<a href="#" onclick="openLegal('Terms of Use');return false">Terms</a>
-<a href="#" onclick="openLegal('Privacy Policy');return false">Privacy</a>
-<a href="#" onclick="openLegal('Copyright & DMCA');return false">Copyright / DMCA</a>
-<a href="#" onclick="openLegal('Community Guidelines');return false">Community</a>
-<a href="#" onclick="openLegal('Content & Age Rating');return false">Content policy</a>
-<a href="#" onclick="openLegal('Contact & Support');return false">Support</a>
-<a href="#" onclick="openFAQ();return false">FAQ</a>
-<a href="#" onclick="openAbout();return false">About</a>
+<a href="#" onclick="openLegal('Terms of Use');return false" data-i18n="footer_terms">Terms</a>
+<a href="#" onclick="openLegal('Privacy Policy');return false" data-i18n="footer_privacy">Privacy</a>
+<a href="#" onclick="openLegal('Copyright & DMCA');return false" data-i18n="footer_copyright">Copyright / DMCA</a>
+<a href="#" onclick="openLegal('Community Guidelines');return false" data-i18n="footer_community">Community</a>
+<a href="#" onclick="openLegal('Content & Age Rating');return false" data-i18n="footer_content_policy">Content policy</a>
+<a href="#" onclick="openLegal('Contact & Support');return false" data-i18n="footer_support">Support</a>
+<a href="#" onclick="openFAQ();return false" data-i18n="footer_faq">FAQ</a>
+<a href="#" onclick="openAbout();return false" data-i18n="footer_about">About</a>
 </div></div>
 <div class="footerBottom">© 2026 KomikVibe · Comic data is live from Komiku. Accounts and comments are live via Firebase; library and reading progress are still stored locally on your device. <span id="buildVersion"></span></div>
 </div></footer>
@@ -207,12 +206,12 @@
 <button class="close" onclick="closeLogin()" aria-label="Close login"><svg class="svgIcon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"></path></svg></button>
 <div class="eyebrow" id="authEyebrow">Login</div>
 <h2 id="authHeading">Welcome back.</h2>
-<p id="authSubtext">Sign in to follow comics and leave comments.</p>
+<p id="authSubtext" data-i18n="auth_subtext">Sign in to follow comics and leave comments.</p>
 <div id="authError" class="authError" hidden></div>
 <form id="authForm" onsubmit="submitAuth(event)" novalidate>
-<input id="authName" class="authField" placeholder="Display name" autocomplete="name" hidden>
-<input id="authEmail" class="authField" type="email" placeholder="Email" autocomplete="email" required>
-<input id="authPassword" class="authField" type="password" placeholder="Password (min. 8 characters)" autocomplete="current-password" minlength="8" required>
+<input id="authName" class="authField" placeholder="Display name" autocomplete="name" hidden data-i18n-placeholder="auth_name_placeholder">
+<input id="authEmail" class="authField" type="email" placeholder="Email" autocomplete="email" required data-i18n-placeholder="auth_email_placeholder">
+<input id="authPassword" class="authField" type="password" placeholder="Password (min. 8 characters)" autocomplete="current-password" minlength="8" required data-i18n-placeholder="auth_password_placeholder">
 <button class="primary" style="width:100%" type="submit" id="authSubmitBtn">Sign in</button>
 </form>
 <p class="authSwitch"><span id="authSwitchPrompt">No account yet?</span> <a href="#" onclick="toggleAuthMode();return false" id="authSwitchLink">Create one</a></p>

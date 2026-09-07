@@ -15,6 +15,8 @@ src/firebase.ts       init Firebase app dari env var (dipakai bareng oleh auth.t
 src/auth.ts           login/signup/logout via Firebase Authentication (email & password)
 src/comments.ts       fetch/post komentar & review ke Firestore — lihat "Setup Firebase" di bawah
 src/views.ts          counter view harian di Firestore, buat section "Trending today"
+src/ratings.ts        tap-to-rate komik (terpisah dari komentar) — lihat "Rating komik" di bawah
+src/i18n.ts           kamus string UI Indonesia/Inggris — lihat "Bahasa" di bawah
 src/app.ts           seluruh logic aplikasi (navigasi, filter, reader, login, dsb.)
 src/uiChrome.ts       perilaku menu mobile/drawer
 src/main.ts           entry point, cuma import file-file di atas
@@ -162,6 +164,40 @@ filter+`orderBy` (itu butuh composite index manual di Firestore, sudah
 dicek langsung ke dokumentasinya) — pengurutan komentar dilakukan di sisi
 JS, bukan di query, supaya nol langkah index manual di Firebase Console.
 
+## Bahasa (Indonesia default)
+
+UI aplikasi (bukan konten komik — itu sudah bahasa Indonesia dari sananya,
+lihat "Catatan lain" di bawah) sekarang punya dua bahasa: **Indonesia
+(default)** dan Inggris, lewat tombol "ID"/"EN" di top bar. Pilihan
+tersimpan di localStorage (`panpan-lang`) jadi tetap kepakai di kunjungan
+berikutnya. Implementasinya di `src/i18n.ts` — kamus string sederhana
+(bukan library i18n), dipasang lewat atribut `data-i18n` /
+`data-i18n-placeholder` / `data-i18n-title` di `index.html`, plus
+pemanggilan `t()` langsung untuk teks yang di-generate dari
+`src/app.ts` (toast, label tombol dinamis, dll.).
+
+**Cakupan saat ini**: nav, beranda, explore, detail komik, reader, akun,
+form login, footer, dan semua pesan toast/loading/error sudah diterjemahkan.
+**Halaman FAQ, About, dan Legal (Terms/Privacy/dll.) masih bahasa Inggris
+saja** untuk sementara — isinya panjang dan menyangkut kebijakan, jadi
+sengaja tidak buru-buru diterjemahkan di batch ini supaya tidak ada
+salah-terjemah pada bagian yang sensitif. Nama genre dan tipe komik
+(Manga/Manhwa/Manhua) tidak diterjemahkan karena itu istilah baku.
+
+## Rating komik (tap-to-rate)
+
+Komiku sendiri tidak punya data rating (lihat `NO_RATING` di `src/komiku.ts`),
+jadi widget "Reader rating" di halaman detail komik (di bawah deskripsi, di
+atas daftar chapter) adalah fitur sendiri — 5 bintang yang bisa langsung
+ditap, sengaja **terpisah dari komentar** (dulu komentar sempat punya
+rating, sudah dihapus karena "ribet"). Butuh login (redirect ke form login
+kalau belum), satu rating per user per komik (nge-tap ulang mengganti
+rating lama), disimpan di Firestore lewat `src/ratings.ts`
+(`ratings/{mangaId}/users/{uid}`) — rata-rata dan jumlah rating dihitung di
+sisi klien dari subcollection itu. Rule-nya ada di `firestore.rules`, jadi
+kalau baru update dari versi sebelumnya, **publish ulang rules-nya**
+supaya collection `ratings` ikut ke-cover.
+
 ## Catatan lain
 
 - Komiku.org sudah bahasa Indonesia dari sananya, jadi tidak ada logic
@@ -173,7 +209,22 @@ JS, bukan di query, supaya nol langkah index manual di Firebase Console.
   backend buat itu. Komentar/review sudah live lewat Firebase; data komik
   sudah live lewat Komiku (lihat "Sumber data" di atas).
 - Progress baca (`panpan-progress` di localStorage) dipakai buat mengisi
-  section "Continue reading" di homepage dan tab History di Account.
+  section "Continue reading" di homepage dan bagian "Reading history" di
+  tab Library (dibatasi 20 entri terakhir).
+- Tab "My library" dan "Reading history" di Account sudah digabung jadi satu
+  tab **Library**: bagian atas judul yang di-follow, bagian bawah riwayat
+  baca. Sidebar akun tidak lagi menampilkan badge role ("READER") — sudah
+  dihapus karena tidak dipakai untuk apa-apa.
+- Reader (halaman baca chapter) sekarang benar-benar full-width, tidak ada
+  lagi ruang kosong di kiri-kanan gambar komik.
+- Jumlah chapter di halaman detail komik dulu bisa salah nampilin "0" kalau
+  chapter terbaru itu kebetulan "Chapter 0" (prolog) — nomor chapter
+  ke-tertukar sama jumlah chapter. Sudah diperbaiki, sekarang selalu pakai
+  jumlah chapter yang sebenarnya.
+- Fetch listing yang butuh akumulasi banyak halaman (lihat "Filter tipe di
+  level listing itu client-side" di atas) sekarang narik beberapa halaman
+  sekaligus secara paralel (4 per giliran), bukan satu-satu — mempercepat
+  filter yang jarang cocok tanpa menambah jumlah request-nya.
 - Daftar genre (home & Explore) ditarik langsung dari endpoint `/genre-all`
   Komiku (~100 tag), bukan daftar hardcoded — lihat `EXCLUDED_GENRE_SLUGS`
   di `src/komiku.ts` untuk tag yang sengaja di-skip (konten eksplisit/dewasa

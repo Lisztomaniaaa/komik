@@ -38,7 +38,6 @@ export type AccountTab =
   | "overview"
   | "profile"
   | "library"
-  | "history"
   | "notifications"
   | "settings"
   | "security";

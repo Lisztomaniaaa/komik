@@ -40,5 +40,22 @@ service cloud.firestore {
 
       allow delete: if false;
     }
+
+    // Tap-to-rate widget on a comic's page (see src/ratings.ts) — separate
+    // from comments entirely. One doc per user per manga so a user can only
+    // ever write their own rating; the average shown is computed client-side
+    // over this subcollection.
+    match /ratings/{mangaId}/users/{uid} {
+      allow read: if true;
+
+      allow write: if request.auth != null
+                   && request.auth.uid == uid
+                   && request.resource.data.keys().hasOnly(['stars', 'updated'])
+                   && request.resource.data.stars is int
+                   && request.resource.data.stars >= 1
+                   && request.resource.data.stars <= 5;
+
+      allow delete: if false;
+    }
   }
 }
