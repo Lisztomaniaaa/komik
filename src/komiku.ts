@@ -112,31 +112,21 @@ function parseKomikuDate(raw: string | undefined): string {
   return new Date(Number(y), Number(mo) - 1, Number(d)).toISOString();
 }
 
-export async function fetchMangaDetail(slug: string): Promise<Comic> {
-  const d = await getJson<KomikuDetail>(`/detail-komik/${slug}`);
-  return {
-    id: d.slug || slug,
-    title: d.title,
-    type: deriveType(d.info?.Tipe),
-    genres: d.genres || [],
-    status: deriveStatus(d.info?.Status),
-    rating: NO_RATING,
-    chapters: (d.chapters || []).length,
-    readers: "-",
-    desc: d.description || d.sinopsis || "",
-    cover: proxiedImage(d.thumbnail),
-  };
-}
-
 // Extracts the manga slug a chapter is actually served under from its own
 // /baca-chapter/<slug>/<number> link — see the ChapterEntry.readerSlug note.
 function readerSlugFromChapterLink(apiLink: string | null, fallback: string): string {
   return apiLink?.match(/^\/baca-chapter\/([^/]+)\//)?.[1] || fallback;
 }
 
-export async function fetchChapters(mangaId: string): Promise<ChapterEntry[]> {
-  const d = await getJson<KomikuDetail>(`/detail-komik/${mangaId}`);
-  return (d.chapters || [])
+// The comic's own info AND its chapter list both live on the same
+// /detail-komik/<slug> scrape — opening a comic used to fetch this page
+// twice (once for each), which doubled the load on that endpoint (and the
+// wait) every single time. One fetch now serves both.
+export async function fetchComicWithChapters(
+  slug: string,
+): Promise<{ comic: Comic; chapters: ChapterEntry[] }> {
+  const d = await getJson<KomikuDetail>(`/detail-komik/${slug}`);
+  const chapters = (d.chapters || [])
     .filter((ch) => ch.chapterNumber)
     .map((ch) => {
       const num = Number.parseFloat(ch.chapterNumber);
@@ -145,9 +135,22 @@ export async function fetchChapters(mangaId: string): Promise<ChapterEntry[]> {
         label: Number.isFinite(num) ? `Chapter ${num}` : ch.title || "Chapter",
         chapterNumber: Number.isFinite(num) ? num : null,
         publishAt: parseKomikuDate(ch.date),
-        readerSlug: readerSlugFromChapterLink(ch.apiLink, mangaId),
+        readerSlug: readerSlugFromChapterLink(ch.apiLink, slug),
       };
     });
+  const comic: Comic = {
+    id: d.slug || slug,
+    title: d.title,
+    type: deriveType(d.info?.Tipe),
+    genres: d.genres || [],
+    status: deriveStatus(d.info?.Status),
+    rating: NO_RATING,
+    chapters: chapters.length,
+    readers: "-",
+    desc: d.description || d.sinopsis || "",
+    cover: proxiedImage(d.thumbnail),
+  };
+  return { comic, chapters };
 }
 
 export async function fetchChapterPages(mangaId: string, chapterId: string): Promise<string[]> {

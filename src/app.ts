@@ -1,13 +1,11 @@
 import { logOut, onAuthChange, signIn, signUp } from "./auth";
 import { firebaseConfigured } from "./firebaseConfig";
-import { applyI18n, getLang, setLang, t } from "./i18n";
 import {
   fetchChapterPages,
-  fetchChapters,
+  fetchComicWithChapters,
   fetchGenres,
   fetchLatestPool,
   fetchList,
-  fetchMangaDetail,
   fetchTrendingAllTime,
   quickSearch,
 } from "./komiku";
@@ -94,14 +92,14 @@ function goHome(): void {
   scrollTop();
   history.replaceState({ view: "home" }, "", "#home");
 }
-function showExplore(): void {
+function showExplore(fromPopState = false): void {
   closeMobileMenu();
   hideViews();
   $("exploreView").classList.add("active");
   setNav("explore");
   applyFilters();
   scrollTop();
-  history.pushState({ view: "explore" }, "", "#explore");
+  if (!fromPopState) history.pushState({ view: "explore" }, "", "#explore");
 }
 function setNav(which: "home" | "explore" | "library" | "account" | ""): void {
   $("navHome").classList.toggle("active", which === "home");
@@ -110,19 +108,23 @@ function setNav(which: "home" | "explore" | "library" | "account" | ""): void {
     .querySelectorAll<HTMLElement>(".bottomNavItem")
     .forEach((b) => b.classList.toggle("active", b.dataset.nav === which));
 }
+// The comic's info and its chapter list come from the same underlying
+// scrape (see fetchComicWithChapters), so this is the one place that
+// actually hits the network — comicBy below just serves the comic half,
+// filling both caches either way so a later comicWithChapters call is free.
+async function comicWithChapters(id: string): Promise<{ comic: Comic; chapters: ChapterEntry[] }> {
+  const cachedComic = mangaCache.get(id);
+  const cachedChapters = chaptersCache.get(id);
+  if (cachedComic && cachedChapters) return { comic: cachedComic, chapters: cachedChapters };
+  const { comic, chapters } = await fetchComicWithChapters(id);
+  mangaCache.set(id, comic);
+  chaptersCache.set(id, chapters);
+  return { comic, chapters };
+}
 async function comicBy(id: string): Promise<Comic> {
   const cached = mangaCache.get(id);
   if (cached) return cached;
-  const comic = await fetchMangaDetail(id);
-  mangaCache.set(id, comic);
-  return comic;
-}
-async function getChaptersFor(mangaId: string): Promise<ChapterEntry[]> {
-  const cached = chaptersCache.get(mangaId);
-  if (cached) return cached;
-  const list = await fetchChapters(mangaId);
-  chaptersCache.set(mangaId, list);
-  return list;
+  return (await comicWithChapters(id)).comic;
 }
 
 function cardHtml(c: Comic, rank?: number): string {
@@ -147,7 +149,7 @@ async function renderSearchResults(): Promise<void> {
         (c) =>
           `<div class="searchResult" onclick="openComic('${c.id}');hideSearchResults()"><div class="miniCover">${c.cover ? `<img src="${c.cover}" alt="">` : ""}</div><div><strong>${c.title}</strong><small>${c.type} · ${c.status} · ★ ${c.rating}</small></div></div>`,
       )
-      .join("") || `<div class="searchEmpty">${t("no_comics_found")}</div>`;
+      .join("") || '<div class="searchEmpty">No comics found.</div>';
   box.style.display = "block";
 }
 function hideSearchResults(): void {
@@ -165,7 +167,7 @@ async function renderExplore(): Promise<void> {
   const grid = $("exploreGrid");
   const q = (($("search") as HTMLInputElement).value || "").trim();
   const requestId = ++exploreRequestId;
-  grid.innerHTML = `<div class="empty" style="grid-column:1/-1">${t("loading")}</div>`;
+  grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Loading…</div>';
   try {
     const { comics, total } = await fetchList({
       offset: (explorePage - 1) * PAGE_SIZE,
@@ -181,11 +183,11 @@ async function renderExplore(): Promise<void> {
     explorePage = Math.min(Math.max(1, explorePage), pages);
     grid.innerHTML =
       comics.map((c) => cardHtml(c)).join("") ||
-      `<div class="empty" style="grid-column:1/-1">${t("no_comics_match_filters")}</div>`;
+      '<div class="empty" style="grid-column:1/-1">No comics match these filters.</div>';
     renderPagination("explorePagination", explorePage, pages, "setExplorePage", total);
   } catch {
     if (requestId !== exploreRequestId) return;
-    grid.innerHTML = `<div class="empty" style="grid-column:1/-1">${t("failed_load_comics")}</div>`;
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Failed to load comics from Komiku.</div>';
   }
 }
 let homeGenreRequestId = 0;
@@ -193,7 +195,7 @@ async function renderHomeGenre(genre = "All"): Promise<void> {
   const grid = $("genreResults");
   homeGenreCurrent = genre;
   const requestId = ++homeGenreRequestId;
-  grid.innerHTML = `<div class="empty" style="grid-column:1/-1">${t("loading")}</div>`;
+  grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Loading…</div>';
   try {
     const { comics, total } = await fetchList({
       offset: (homeGenrePage - 1) * PAGE_SIZE,
@@ -206,11 +208,11 @@ async function renderHomeGenre(genre = "All"): Promise<void> {
     homeGenrePage = Math.min(Math.max(1, homeGenrePage), pages);
     grid.innerHTML =
       comics.map((c) => cardHtml(c)).join("") ||
-      `<div class="empty" style="grid-column:1/-1">${t("no_comics_in_genre")}</div>`;
+      '<div class="empty" style="grid-column:1/-1">No comics in this genre yet.</div>';
     renderPagination("genrePagination", homeGenrePage, pages, "setHomeGenrePage", total);
   } catch {
     if (requestId !== homeGenreRequestId) return;
-    grid.innerHTML = `<div class="empty" style="grid-column:1/-1">${t("failed_load_comics")}</div>`;
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Failed to load comics from Komiku.</div>';
   }
 }
 let genreChipsRendered = false;
@@ -232,7 +234,7 @@ async function renderGenreChips(): Promise<void> {
           )
           .join("") +
           (extra > 0
-            ? `<span class="genre genreMore" onclick="toggleGenreMore(this,'homeGenres')">${t("show_more_prefix")}${extra}${t("show_more_suffix")}</span>`
+            ? `<span class="genre genreMore" onclick="toggleGenreMore(this,'homeGenres')">Show ${extra} more</span>`
             : ""),
       );
     }
@@ -247,7 +249,7 @@ async function renderGenreChips(): Promise<void> {
           )
           .join("") +
           (extra > 0
-            ? `<button class="filterBtn genreMore" onclick="toggleGenreMore(this,'exploreGenreButtons')">${t("show_more_prefix")}${extra}${t("show_more_suffix")}</button>`
+            ? `<button class="filterBtn genreMore" onclick="toggleGenreMore(this,'exploreGenreButtons')">Show ${extra} more</button>`
             : ""),
       );
     }
@@ -263,7 +265,7 @@ function toggleGenreMore(btn: HTMLElement, containerId: string): void {
     el.hidden = !isExpanding;
   });
   const count = container.querySelectorAll(".genreExtra").length;
-  btn.textContent = isExpanding ? t("show_less") : `${t("show_more_prefix")}${count}${t("show_more_suffix")}`;
+  btn.textContent = isExpanding ? "Show less" : `Show ${count} more`;
 }
 function setHomeGenre(genre: string, btn: HTMLElement): void {
   document.querySelectorAll("#genres .genre").forEach((b) => b.classList.remove("active"));
@@ -294,7 +296,7 @@ function renderPagination(
     out += `<button class="${p === page ? "active" : ""}" onclick="${handler}(${p})">${p}</button>`;
   if (last < pages)
     out += `${last < pages - 1 ? '<span class="pageInfo">…</span>' : ""}<button onclick="${handler}(${pages})">${pages}</button>`;
-  out += `<button ${page === pages ? "disabled" : ""} onclick="${handler}(${page + 1})">›</button><span class="pageInfo">${total} ${t("comics_suffix")}</span>`;
+  out += `<button ${page === pages ? "disabled" : ""} onclick="${handler}(${page + 1})">›</button><span class="pageInfo">${total} comics</span>`;
   box.innerHTML = out;
 }
 function setExplorePage(page: number): void {
@@ -328,7 +330,7 @@ let trendingAllTimePage = 1;
 async function renderTrending(): Promise<void> {
   const grid = document.getElementById("trendingGrid");
   if (!grid) return;
-  grid.innerHTML = `<div class="empty" style="grid-column:1/-1">${t("loading")}</div>`;
+  grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Loading…</div>';
   try {
     if (!trendingAllTimePool) {
       trendingAllTimePool = await fetchTrendingAllTime();
@@ -342,10 +344,10 @@ async function renderTrending(): Promise<void> {
       pool
         .slice(start, start + PAGE_SIZE)
         .map((c, i) => cardHtml(c, start + i + 1))
-        .join("") || `<div class="empty" style="grid-column:1/-1">${t("no_comics_right_now")}</div>`;
+        .join("") || '<div class="empty" style="grid-column:1/-1">No comics right now.</div>';
     renderPagination("trendingPagination", trendingAllTimePage, pages, "setTrendingPage", pool.length);
   } catch {
-    grid.innerHTML = `<div class="empty" style="grid-column:1/-1">${t("failed_load_trending")}</div>`;
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Failed to load trending comics.</div>';
   }
 }
 function setTrendingPage(page: number): void {
@@ -363,7 +365,7 @@ let trendingTodayPage = 1;
 async function renderTrendingToday(): Promise<void> {
   const grid = document.getElementById("trendingTodayTrack");
   if (!grid) return;
-  grid.innerHTML = `<div class="empty" style="grid-column:1/-1">${t("loading")}</div>`;
+  grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Loading…</div>';
   try {
     if (!trendingTodayPool) {
       let list: Comic[] = [];
@@ -394,10 +396,10 @@ async function renderTrendingToday(): Promise<void> {
       pool
         .slice(start, start + PAGE_SIZE)
         .map((c, i) => cardHtml(c, start + i + 1))
-        .join("") || `<div class="empty" style="grid-column:1/-1">${t("no_comics_right_now")}</div>`;
+        .join("") || '<div class="empty" style="grid-column:1/-1">No comics right now.</div>';
     renderPagination("trendingTodayPagination", trendingTodayPage, pages, "setTrendingTodayPage", pool.length);
   } catch {
-    grid.innerHTML = `<div class="empty" style="grid-column:1/-1">${t("failed_load_trending")}</div>`;
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Failed to load trending comics.</div>';
   }
 }
 function setTrendingTodayPage(page: number): void {
@@ -410,7 +412,7 @@ async function renderLatestUpdates(): Promise<void> {
   const grid = document.getElementById("latestGrid");
   if (!grid) return;
   const requestId = ++latestRequestId;
-  grid.innerHTML = `<div class="empty" style="grid-column:1/-1">${t("loading")}</div>`;
+  grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Loading…</div>';
   try {
     const { comics, total } = await fetchList({
       offset: (latestPage - 1) * PAGE_SIZE,
@@ -423,11 +425,11 @@ async function renderLatestUpdates(): Promise<void> {
     latestPage = Math.min(Math.max(1, latestPage), pages);
     grid.innerHTML =
       comics.map((c) => cardHtml(c)).join("") ||
-      `<div class="empty" style="grid-column:1/-1">${t("no_comics_match_filter")}</div>`;
+      '<div class="empty" style="grid-column:1/-1">No comics match this filter.</div>';
     renderPagination("latestPagination", latestPage, pages, "setLatestPage", total);
   } catch {
     if (requestId !== latestRequestId) return;
-    grid.innerHTML = `<div class="empty" style="grid-column:1/-1">${t("failed_load_comics")}</div>`;
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Failed to load comics from Komiku.</div>';
   }
 }
 async function renderContinueReading(): Promise<void> {
@@ -438,15 +440,15 @@ async function renderContinueReading(): Promise<void> {
   );
   const entries = Object.entries(saved).sort((a, b) => b[1].updated - a[1].updated);
   if (entries.length === 0) {
-    box.innerHTML = `<div class="empty">${t("not_started_reading")}</div>`;
+    box.innerHTML = '<div class="empty">You have not started reading anything yet.</div>';
     return;
   }
   const [mangaId] = entries[0][0].split("::");
   try {
     const c = await comicBy(mangaId);
-    box.innerHTML = `<div class="row" style="cursor:pointer" onclick="openComic('${c.id}')"><div class="thumb">${c.cover ? `<img src="${c.cover}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:7px">` : ""}</div><div><strong>${c.title}</strong><small>${Math.round(entries[0][1].percent)}% ${t("reading_progress")}</small></div><span class="new">${t("continue_badge")}</span></div>`;
+    box.innerHTML = `<div class="row" style="cursor:pointer" onclick="openComic('${c.id}')"><div class="thumb">${c.cover ? `<img src="${c.cover}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:7px">` : ""}</div><div><strong>${c.title}</strong><small>${Math.round(entries[0][1].percent)}% progress</small></div><span class="new">CONTINUE</span></div>`;
   } catch {
-    box.innerHTML = `<div class="empty">${t("not_started_reading")}</div>`;
+    box.innerHTML = '<div class="empty">You have not started reading anything yet.</div>';
   }
 }
 function startReading(): void {
@@ -454,22 +456,22 @@ function startReading(): void {
   else showExplore();
 }
 
-function openFAQ(): void {
+function openFAQ(fromPopState = false): void {
   hideViews();
   $("faqView").classList.add("active");
   setNav("");
   scrollTop();
-  history.pushState({ view: "faq" }, "", "#faq");
+  if (!fromPopState) history.pushState({ view: "faq" }, "", "#faq");
 }
-function openAbout(): void {
+function openAbout(fromPopState = false): void {
   hideViews();
   $("aboutView").classList.add("active");
   setNav("");
   scrollTop();
-  history.pushState({ view: "about" }, "", "#about");
+  if (!fromPopState) history.pushState({ view: "about" }, "", "#about");
 }
 
-function openLegal(title: string): void {
+function openLegal(title: string, fromPopState = false): void {
   hideViews();
   $("legalView").classList.add("active");
   setNav("");
@@ -484,7 +486,7 @@ function openLegal(title: string): void {
   };
   $("legalLead").textContent = map[title] || "Panpan Comics information and policies.";
   scrollTop();
-  history.pushState({ view: "legal", title }, "", "#legal");
+  if (!fromPopState) history.pushState({ view: "legal", title }, "", "#legal");
 }
 
 function filterBy(key: FilterKey, value: string): void {
@@ -510,20 +512,24 @@ function applyFilters(): void {
 }
 
 let openComicRequestId = 0;
-async function openComic(id: string): Promise<void> {
+async function openComic(id: string, fromPopState = false): Promise<void> {
   currentComic = id;
   const requestId = ++openComicRequestId;
   hideViews();
   $("detailView").classList.add("active");
   setNav("");
-  $("detailTitle").textContent = t("loading");
+  $("detailTitle").textContent = "Loading…";
   $("detailGenre").textContent = "";
   $("detailDesc").textContent = "";
   $("detailChips").innerHTML = "";
   $("detailCover").style.backgroundImage = "";
   $("chapterList").innerHTML = "";
   scrollTop();
-  history.pushState({ view: "detail", id }, "", "#comic-" + id);
+  // Only push a new history entry when navigating forward into a comic —
+  // re-entering via the back/forward buttons (see the popstate handler)
+  // must NOT push again, or every "back" from here just pushes a duplicate
+  // #comic-<id> entry on top, so the back button never actually leaves.
+  if (!fromPopState) history.pushState({ view: "detail", id }, "", "#comic-" + id);
 
   if (firebaseConfigured) {
     import("./views")
@@ -532,7 +538,7 @@ async function openComic(id: string): Promise<void> {
   }
 
   try {
-    const [c, chapters] = await Promise.all([comicBy(id), getChaptersFor(id)]);
+    const { comic: c, chapters } = await comicWithChapters(id);
     if (requestId !== openComicRequestId) return;
     $("detailTitle").textContent = c.title;
     $("detailGenre").textContent = c.type + " · " + c.genres.join(" · ");
@@ -553,30 +559,30 @@ async function openComic(id: string): Promise<void> {
       $("detailCover").style.backgroundPosition = "center";
     }
     $("detailCover").dataset.title = c.title;
-    $("followBtn").textContent = followed.has(id) ? t("following") : t("follow");
+    $("followBtn").textContent = followed.has(id) ? "Following" : "Follow";
     buildChapters(chapters, id);
     loadComments("detail", true);
   } catch {
     if (requestId !== openComicRequestId) return;
-    $("detailTitle").textContent = t("failed_load_comic");
+    $("detailTitle").textContent = "Failed to load this comic.";
   }
 }
 function buildChapters(entries: ChapterEntry[], mangaId: string): void {
   const box = $("chapterList");
   box.className = "chapterScroll";
   if (entries.length === 0) {
-    box.innerHTML = `<div class="empty">${t("no_chapters")}</div>`;
+    box.innerHTML = '<div class="empty">No Indonesian or English chapters found for this comic.</div>';
     return;
   }
   box.innerHTML = entries
     .map(
       (e, i) =>
-        `<div class="chapterRow" onclick="openReader('${e.id}','${mangaId}')"><div><strong>${e.label}</strong><small>${i === 0 ? t("latest_chapter_label") : t("updated_label")} · ${new Date(e.publishAt).toLocaleDateString()}</small></div><span class="chapterGo">${t("read_arrow")}</span></div>`,
+        `<div class="chapterRow" onclick="openReader('${e.id}','${mangaId}')"><div><strong>${e.label}</strong><small>${i === 0 ? "Latest chapter" : "Updated"} · ${new Date(e.publishAt).toLocaleDateString()}</small></div><span class="chapterGo">Read →</span></div>`,
     )
     .join("");
 }
 let openReaderRequestId = 0;
-async function openReader(chapterId: string, id: string = currentComic): Promise<void> {
+async function openReader(chapterId: string, id: string = currentComic, fromPopState = false): Promise<void> {
   const enteringReader = !$("readerView").classList.contains("active");
   currentComic = id;
   currentChapterId = chapterId;
@@ -584,10 +590,10 @@ async function openReader(chapterId: string, id: string = currentComic): Promise
   hideViews();
   $("readerView").classList.add("active");
   setNav("");
-  $("readerTitle").textContent = t("loading");
+  $("readerTitle").textContent = "Loading…";
   $("readerSelect").innerHTML = "";
   $("readerChapters").innerHTML = "";
-  $("readerView").querySelector(".page")!.innerHTML = `<div class="empty">${t("loading_pages")}</div>`;
+  $("readerView").querySelector(".page")!.innerHTML = '<div class="empty">Loading pages…</div>';
   window.scrollTo({ top: 0, behavior: "instant" });
   scrollTop();
   // Only the first entry into the reader is a real navigation (one history
@@ -597,11 +603,11 @@ async function openReader(chapterId: string, id: string = currentComic): Promise
   // otherwise every chapter visited would need its own back press to get
   // past, which reads as "back doesn't work".
   const hash = "#read-" + id + "::" + chapterId;
-  if (enteringReader) history.pushState({ view: "reader", id, chapterId }, "", hash);
-  else history.replaceState({ view: "reader", id, chapterId }, "", hash);
+  if (enteringReader && !fromPopState) history.pushState({ view: "reader", id, chapterId }, "", hash);
+  else if (!fromPopState) history.replaceState({ view: "reader", id, chapterId }, "", hash);
 
   try {
-    const [c, chapters] = await Promise.all([comicBy(id), getChaptersFor(id)]);
+    const { comic: c, chapters } = await comicWithChapters(id);
     if (requestId !== openReaderRequestId) return;
     const entry = chapters.find((e) => e.id === chapterId);
     // Komiku sometimes serves a title's chapters under a different slug than
@@ -609,7 +615,7 @@ async function openReader(chapterId: string, id: string = currentComic): Promise
     // fetched in parallel with the chapter list above — it needs `entry`.
     const pages = await fetchChapterPages(entry?.readerSlug ?? id, chapterId);
     if (requestId !== openReaderRequestId) return;
-    $("readerTitle").textContent = c.title + " · " + (entry?.label ?? t("chapter_fallback"));
+    $("readerTitle").textContent = c.title + " · " + (entry?.label ?? "Chapter");
 
     const sel = $("readerSelect") as HTMLSelectElement;
     sel.innerHTML = chapters
@@ -623,7 +629,7 @@ async function openReader(chapterId: string, id: string = currentComic): Promise
     const page = $("readerView").querySelector(".page") as HTMLElement;
     page.innerHTML =
       pages.map((url) => `<img class="comicPage" src="${url}" alt="" loading="lazy">`).join("") ||
-      `<div class="empty">${t("no_pages_available")}</div>`;
+      '<div class="empty">No pages available for this chapter.</div>';
 
     const saved: Record<string, ReadingProgressEntry> = JSON.parse(
       localStorage.getItem("panpan-progress") || "{}",
@@ -633,9 +639,9 @@ async function openReader(chapterId: string, id: string = currentComic): Promise
     loadComments("reader", true);
   } catch {
     if (requestId !== openReaderRequestId) return;
-    $("readerTitle").textContent = t("failed_load_chapter");
+    $("readerTitle").textContent = "Failed to load this chapter.";
     ($("readerView").querySelector(".page") as HTMLElement).innerHTML =
-      `<div class="empty">${t("failed_load_pages")}</div>`;
+      '<div class="empty">Failed to load pages from Komiku.</div>';
   }
 }
 function changeChapter(v: string): void {
@@ -643,21 +649,21 @@ function changeChapter(v: string): void {
 }
 function openCurrentReader(): void {
   if (currentChapterId) openReader(currentChapterId, currentComic);
-  else toast(t("toast_no_reader_open"));
+  else toast("You have not opened a reader yet.");
 }
 async function prevChapter(): Promise<void> {
   const list = chaptersCache.get(currentComic);
   if (!list || !currentChapterId) return;
   const idx = list.findIndex((e) => e.id === currentChapterId);
   if (idx >= 0 && idx < list.length - 1) openReader(list[idx + 1].id, currentComic);
-  else toast(t("toast_first_chapter"));
+  else toast("Already at the first chapter.");
 }
 async function nextChapter(): Promise<void> {
   const list = chaptersCache.get(currentComic);
   if (!list || !currentChapterId) return;
   const idx = list.findIndex((e) => e.id === currentChapterId);
   if (idx > 0) openReader(list[idx - 1].id, currentComic);
-  else toast(t("toast_latest_chapter"));
+  else toast("You are at the latest chapter.");
 }
 function goBackFromDetail(): void {
   history.back();
@@ -666,12 +672,12 @@ function toggleFollow(): void {
   if (!requireLogin()) return;
   if (followed.has(currentComic)) {
     followed.delete(currentComic);
-    toast(t("toast_removed_library"));
+    toast("Removed from library.");
   } else {
     followed.add(currentComic);
-    toast(t("toast_added_library"));
+    toast("Added to library.");
   }
-  $("followBtn").textContent = followed.has(currentComic) ? t("following") : t("follow");
+  $("followBtn").textContent = followed.has(currentComic) ? "Following" : "Follow";
 }
 
 function setAuthMode(mode: "signin" | "signup"): void {
@@ -679,11 +685,11 @@ function setAuthMode(mode: "signin" | "signup"): void {
   const nameField = $("authName") as HTMLInputElement;
   nameField.hidden = mode === "signin";
   nameField.required = mode === "signup";
-  $("authEyebrow").textContent = mode === "signin" ? t("auth_login_eyebrow") : t("auth_signup_eyebrow");
-  $("authHeading").textContent = mode === "signin" ? t("auth_login_heading") : t("auth_signup_heading");
-  $("authSubmitBtn").textContent = mode === "signin" ? t("auth_submit_signin") : t("auth_submit_signup");
-  $("authSwitchPrompt").textContent = mode === "signin" ? t("auth_switch_prompt_signin") : t("auth_switch_prompt_signup");
-  $("authSwitchLink").textContent = mode === "signin" ? t("auth_switch_link_signin") : t("auth_switch_link_signup");
+  $("authEyebrow").textContent = mode === "signin" ? "Login" : "Create account";
+  $("authHeading").textContent = mode === "signin" ? "Welcome back." : "Join KomikVibe.";
+  $("authSubmitBtn").textContent = mode === "signin" ? "Sign in" : "Create account";
+  $("authSwitchPrompt").textContent = mode === "signin" ? "No account yet?" : "Already have an account?";
+  $("authSwitchLink").textContent = mode === "signin" ? "Create one" : "Sign in";
 }
 function toggleAuthMode(): void {
   setAuthMode(authMode === "signin" ? "signup" : "signin");
@@ -692,7 +698,7 @@ function toggleAuthMode(): void {
 function openLogin(): void {
   closeMobileMenu();
   if (!firebaseConfigured) {
-    toast(t("toast_login_not_set_up"));
+    toast("Login isn't set up yet.");
     return;
   }
   setAuthMode("signin");
@@ -711,17 +717,17 @@ async function submitAuth(e: Event): Promise<void> {
   const password = ($("authPassword") as HTMLInputElement).value;
   const name = ($("authName") as HTMLInputElement).value.trim();
   if (!email) {
-    errorBox.textContent = t("auth_error_email");
+    errorBox.textContent = "Please enter your email.";
     errorBox.hidden = false;
     return;
   }
   if (password.length < 8) {
-    errorBox.textContent = t("auth_error_password");
+    errorBox.textContent = "Password must be at least 8 characters.";
     errorBox.hidden = false;
     return;
   }
   if (authMode === "signup" && !name) {
-    errorBox.textContent = t("auth_error_name");
+    errorBox.textContent = "Please enter a display name.";
     errorBox.hidden = false;
     return;
   }
@@ -731,9 +737,9 @@ async function submitAuth(e: Event): Promise<void> {
     if (authMode === "signup") await signUp(name, email, password);
     else await signIn(email, password);
     closeLogin();
-    toast(authMode === "signup" ? t("toast_account_created") : t("toast_signed_in"));
+    toast(authMode === "signup" ? "Account created." : "Signed in.");
   } catch (err) {
-    errorBox.textContent = err instanceof Error ? err.message : t("auth_error_generic");
+    errorBox.textContent = err instanceof Error ? err.message : "Something went wrong.";
     errorBox.hidden = false;
   } finally {
     btn.disabled = false;
@@ -741,7 +747,7 @@ async function submitAuth(e: Event): Promise<void> {
 }
 async function logout(): Promise<void> {
   await logOut();
-  toast(t("toast_signed_out"));
+  toast("Signed out.");
 }
 function requireLogin(): boolean {
   if (!currentUser) {
@@ -773,16 +779,16 @@ async function loadRatingSummary(mangaId: string): Promise<void> {
 async function rateComic(stars: number): Promise<void> {
   if (!requireLogin()) return;
   if (!firebaseConfigured) {
-    toast(t("toast_ratings_not_set_up"));
+    toast("Ratings aren't set up yet.");
     return;
   }
   try {
     const { submitRating } = await import("./ratings");
     await submitRating(currentComic, currentUser!.uid, stars);
-    toast(t("toast_rating_thanks"));
+    toast("Thanks for rating!");
     loadRatingSummary(currentComic);
   } catch {
-    toast(t("toast_rating_failed"));
+    toast("Couldn't save your rating, try again.");
   }
 }
 function commentHtml(row: CommentRow): string {
@@ -804,12 +810,12 @@ function renderVisibleComments(kind: "reader" | "detail"): void {
   const visible = kind === "detail" ? detailVisibleCount : readerVisibleCount;
   $(containerId).innerHTML =
     rows.length === 0
-      ? `<div class="empty">${t("no_comments_yet")}</div>`
+      ? '<div class="empty">No comments yet — be the first to write one.</div>'
       : rows.slice(0, visible).map(commentHtml).join("");
   const btn = commentLoadMoreBtn(containerId);
   if (btn) {
     const done = rows.length === 0 || visible >= rows.length;
-    btn.textContent = done ? t("all_comments_loaded") : t("load_more_comments");
+    btn.textContent = done ? "All comments loaded" : "Load more comments";
     btn.disabled = done;
     btn.style.opacity = done ? ".55" : "";
   }
@@ -824,14 +830,14 @@ async function loadComments(kind: "reader" | "detail", reset: boolean): Promise<
   if (kind === "detail") detailVisibleCount = COMMENTS_PAGE_SIZE;
   else readerVisibleCount = COMMENTS_PAGE_SIZE;
   $(containerId).innerHTML = firebaseConfigured
-    ? `<div class="empty">${t("loading")}</div>`
-    : `<div class="empty">${t("toast_comments_not_set_up")}</div>`;
+    ? '<div class="empty">Loading…</div>'
+    : '<div class="empty">Comments aren\'t set up yet.</div>';
   if (!firebaseConfigured) return;
   try {
     const { fetchThread } = await import("./comments");
     commentThreads.set(threadKey(kind), await fetchThread(currentComic, chapterId));
   } catch {
-    $(containerId).innerHTML = `<div class="empty">${t("failed_load_comments")}</div>`;
+    $(containerId).innerHTML = '<div class="empty">Failed to load comments.</div>';
     return;
   }
   renderVisibleComments(kind);
@@ -845,17 +851,17 @@ function loadMoreComments(containerId: string): void {
 async function submitComment(kind: "reader" | "detail"): Promise<void> {
   if (!requireLogin()) return;
   if (!firebaseConfigured) {
-    toast(t("toast_comments_not_set_up"));
+    toast("Comments aren't set up yet.");
     return;
   }
   const prefix = kind === "reader" ? "reader" : "detail";
   const text = ($(prefix + "Comment") as HTMLTextAreaElement).value.trim();
   if (!text) {
-    toast(t("toast_write_comment"));
+    toast("Please write a comment.");
     return;
   }
   const user = currentUser!;
-  const name = user.displayName || user.email || t("reader_fallback_name");
+  const name = user.displayName || user.email || "Reader";
   try {
     const { postComment } = await import("./comments");
     const row = await postComment({
@@ -870,10 +876,10 @@ async function submitComment(kind: "reader" | "detail"): Promise<void> {
     if (kind === "detail") detailVisibleCount++;
     else readerVisibleCount++;
     renderVisibleComments(kind);
-    toast(kind === "reader" ? t("toast_comment_posted") : t("toast_review_posted"));
+    toast("Your " + (kind === "reader" ? "comment" : "review") + " was posted.");
     ($(prefix + "Comment") as HTMLTextAreaElement).value = "";
   } catch {
-    toast(t("toast_post_failed"));
+    toast("Failed to post — please try again.");
   }
 }
 function escapeHtml(v: string): string {
@@ -885,7 +891,52 @@ function escapeHtml(v: string): string {
       )[c],
   );
 }
-function openAccount(tab?: AccountTab): void {
+const LIBRARY_HISTORY_LIMIT = 20;
+async function openLibrary(fromPopState = false): Promise<void> {
+  closeMobileMenu();
+  if (!currentUser) {
+    openLogin();
+    return;
+  }
+  hideViews();
+  $("libraryView").classList.add("active");
+  setNav("library");
+  scrollTop();
+  if (!fromPopState) history.pushState({ view: "library" }, "", "#library");
+
+  const followingBox = $("libraryFollowing");
+  followingBox.innerHTML = "Loading…";
+  const ids = [...followed];
+  const comicsList = await Promise.all(ids.map((id) => comicBy(id).catch(() => null)));
+  followingBox.innerHTML =
+    comicsList
+      .filter((c): c is Comic => c !== null)
+      .map((c) => cardHtml(c))
+      .join("") ||
+    '<div class="empty" style="grid-column:1/-1">Your library is empty — follow a comic to see it here.</div>';
+
+  const historyBox = $("libraryHistory");
+  historyBox.innerHTML = "Loading…";
+  const saved: Record<string, ReadingProgressEntry> = JSON.parse(
+    localStorage.getItem("panpan-progress") || "{}",
+  );
+  const entries = Object.entries(saved)
+    .sort((a, b) => b[1].updated - a[1].updated)
+    .slice(0, LIBRARY_HISTORY_LIMIT);
+  const rows = await Promise.all(
+    entries.map(async ([key, progress]) => {
+      const [mangaId, chapterId] = key.split("::");
+      try {
+        const c = await comicBy(mangaId);
+        return `<div class="accountItem"><div><strong>${c.title}</strong><small>${Math.round(progress.percent)}% progress</small></div><button class="secondary" onclick="openReader('${chapterId}','${mangaId}')">Continue</button></div>`;
+      } catch {
+        return "";
+      }
+    }),
+  );
+  historyBox.innerHTML = rows.join("") || '<div class="empty">No reading history yet.</div>';
+}
+function openAccount(tab?: AccountTab, fromPopState = false): void {
   closeMobileMenu();
   if (!currentUser) {
     openLogin();
@@ -893,14 +944,14 @@ function openAccount(tab?: AccountTab): void {
   }
   hideViews();
   $("accountView").classList.add("active");
-  setNav(tab === "library" ? "library" : "account");
+  setNav("account");
   updateAccountSidebar();
   accountTab(tab || "overview");
   scrollTop();
-  history.pushState({ view: "account", tab: tab || "overview" }, "", "#account");
+  if (!fromPopState) history.pushState({ view: "account", tab: tab || "overview" }, "", "#account");
 }
 function updateAccountSidebar(): void {
-  const displayName = currentUser?.displayName || currentUser?.email || t("reader_fallback_name");
+  const displayName = currentUser?.displayName || currentUser?.email || "Reader";
   const initials = displayName
     .split(/\s+/)
     .filter(Boolean)
@@ -916,50 +967,17 @@ async function accountTab(tab: AccountTab): Promise<void> {
     .querySelectorAll<HTMLElement>(".accountTab[data-tab]")
     .forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   const p = $("accountPanel");
-  const displayName = currentUser?.displayName || t("reader_fallback_name");
+  const displayName = currentUser?.displayName || "Reader";
   if (tab === "overview")
-    p.innerHTML = `<div class="eyebrow">${t("overview_eyebrow")}</div><h2>${t("overview_welcome_prefix")}${escapeHtml(displayName)}.</h2><p>${t("overview_desc")}</p><div class="statCards"><div class="statCard"><b>${followed.size}</b><span>${t("overview_saved_titles")}</span></div></div><div class="accountList"><div class="accountItem"><div><strong>${t("overview_latest_notif")}</strong><small>${t("overview_check_notif")}</small></div><button class="secondary" onclick="accountTab('notifications')">${t("view_label")}</button></div></div>`;
+    p.innerHTML = `<div class="eyebrow">Overview</div><h2>Welcome back, ${escapeHtml(displayName)}.</h2><p>Your reading profile at a glance.</p><div class="statCards"><div class="statCard"><b>${followed.size}</b><span>Saved titles</span></div></div><div class="accountList"><div class="accountItem"><div><strong>Latest notification</strong><small>Check the notifications tab.</small></div><button class="secondary" onclick="accountTab('notifications')">View</button></div></div>`;
   if (tab === "profile")
-    p.innerHTML = `<div class="eyebrow">${t("profile_eyebrow")}</div><h2>${t("profile_heading")}</h2><p>${t("profile_desc")}</p><div class="setting"><div><strong>${t("profile_display_name")}</strong><small>${escapeHtml(displayName)}</small></div></div><div class="setting"><div><strong>${t("profile_email")}</strong><small>${escapeHtml(currentUser?.email || "—")}</small></div><span class="typeBadge">${t("badge_email")}</span></div><div class="setting"><div><strong>${t("profile_signed_in_with")}</strong><small>${t("profile_email_password")}</small></div><span class="statusBadge">${t("badge_connected")}</span></div>`;
-  if (tab === "library") {
-    p.innerHTML = `<div class="eyebrow">${t("tab_library")}</div><h2>${t("library_heading")}</h2><p>${t("library_desc")}</p><h3 style="margin:24px 0 12px">${t("library_following")}</h3><div class="grid" id="libraryList">${t("loading")}</div><h3 style="margin:32px 0 12px">${t("library_history")}</h3><div class="accountList" id="historyList">${t("loading")}</div>`;
-    const ids = [...followed];
-    const comicsList = await Promise.all(ids.map((id) => comicBy(id).catch(() => null)));
-    const list = document.getElementById("libraryList");
-    if (list)
-      list.innerHTML =
-        comicsList
-          .filter((c): c is Comic => c !== null)
-          .map((c) => cardHtml(c))
-          .join("") || `<div class="empty" style="grid-column:1/-1">${t("library_empty")}</div>`;
-
-    const HISTORY_LIMIT = 20;
-    const saved: Record<string, ReadingProgressEntry> = JSON.parse(
-      localStorage.getItem("panpan-progress") || "{}",
-    );
-    const entries = Object.entries(saved)
-      .sort((a, b) => b[1].updated - a[1].updated)
-      .slice(0, HISTORY_LIMIT);
-    const rows = await Promise.all(
-      entries.map(async ([key, progress]) => {
-        const [mangaId, chapterId] = key.split("::");
-        try {
-          const c = await comicBy(mangaId);
-          return `<div class="accountItem"><div><strong>${c.title}</strong><small>${Math.round(progress.percent)}% ${t("reading_progress")}</small></div><button class="secondary" onclick="openReader('${chapterId}','${mangaId}')">${t("continue_label")}</button></div>`;
-        } catch {
-          return "";
-        }
-      }),
-    );
-    const historyList = document.getElementById("historyList");
-    if (historyList) historyList.innerHTML = rows.join("") || `<div class="empty">${t("history_empty")}</div>`;
-  }
+    p.innerHTML = `<div class="eyebrow">Profile</div><h2>About you.</h2><p>Public information shown on your profile.</p><div class="setting"><div><strong>Display name</strong><small>${escapeHtml(displayName)}</small></div></div><div class="setting"><div><strong>Email</strong><small>${escapeHtml(currentUser?.email || "—")}</small></div><span class="typeBadge">EMAIL</span></div><div class="setting"><div><strong>Signed in with</strong><small>Email &amp; password</small></div><span class="statusBadge">CONNECTED</span></div>`;
   if (tab === "notifications")
-    p.innerHTML = `<div class="eyebrow">${t("notif_eyebrow")}</div><h2>${t("notif_heading")}</h2><p>${t("notif_desc")}</p><div class="accountList"><div class="empty">${t("notif_demo_notice")}</div></div>`;
+    p.innerHTML = `<div class="eyebrow">Notifications</div><h2>Stay updated.</h2><p>New chapters from followed titles appear here.</p><div class="accountList"><div class="empty">This is a demo — notifications are not tracked live.</div></div>`;
   if (tab === "settings")
-    p.innerHTML = `<div class="eyebrow">${t("tab_settings")}</div><h2>${t("settings_heading")}</h2><p>${t("settings_desc")}</p><div class="setting"><div><strong>${t("setting_auto_next")}</strong><small>${t("setting_auto_next_desc")}</small></div><button class="toggle on" onclick="this.classList.toggle('on')"></button></div><div class="setting"><div><strong>${t("setting_chapter_notif")}</strong><small>${t("setting_chapter_notif_desc")}</small></div><button class="toggle on" onclick="this.classList.toggle('on')"></button></div><div class="setting"><div><strong>${t("setting_reduce_anim")}</strong><small>${t("setting_reduce_anim_desc")}</small></div><button class="toggle" onclick="this.classList.toggle('on')"></button></div><div class="setting"><div><strong>${t("setting_theme")}</strong><small>${t("setting_theme_desc")}</small></div><button class="secondary" onclick="toggleTheme()">${t("theme_aria")}</button></div><div class="setting"><div><strong>${t("continue_reading")}</strong><small>${t("setting_continue_desc")}</small></div><button class="secondary" onclick="openCurrentReader()">${t("open_reader_btn")}</button></div>`;
+    p.innerHTML = `<div class="eyebrow">Preferences</div><h2>Settings.</h2><p>Reader, appearance and notification preferences.</p><div class="setting"><div><strong>Auto next chapter</strong><small>Open the next chapter after finishing a reader page.</small></div><button class="toggle on" onclick="this.classList.toggle('on')"></button></div><div class="setting"><div><strong>Chapter notifications</strong><small>Notify me when followed comics update.</small></div><button class="toggle on" onclick="this.classList.toggle('on')"></button></div><div class="setting"><div><strong>Reduce animations</strong><small>Use simpler transitions on mobile.</small></div><button class="toggle" onclick="this.classList.toggle('on')"></button></div><div class="setting"><div><strong>Theme</strong><small>Switch between dark and light mode.</small></div><button class="secondary" onclick="toggleTheme()">Toggle theme</button></div><div class="setting"><div><strong>Continue reading</strong><small>Jump back into the last chapter you opened.</small></div><button class="secondary" onclick="openCurrentReader()">Open reader</button></div>`;
   if (tab === "security")
-    p.innerHTML = `<div class="eyebrow">${t("tab_security")}</div><h2>${t("security_heading")}</h2><p>${t("security_desc")}</p><div class="setting"><div><strong>${t("security_connected_login")}</strong><small>${t("profile_email_password")}</small></div><span style="color:var(--red);font-weight:850">${t("badge_connected")}</span></div><div class="setting"><div><strong>${t("sign_out_label")}</strong><small>${t("sign_out_desc")}</small></div><button class="secondary" onclick="logout()">${t("sign_out_label")}</button></div>`;
+    p.innerHTML = `<div class="eyebrow">Security</div><h2>Account security.</h2><p>Manage how you're signed in.</p><div class="setting"><div><strong>Connected login</strong><small>Email &amp; password</small></div><span style="color:var(--red);font-weight:850">CONNECTED</span></div><div class="setting"><div><strong>Sign out</strong><small>End your session on this device.</small></div><button class="secondary" onclick="logout()">Sign out</button></div>`;
 }
 function saveReadingProgress(): void {
   if (!$("readerView").classList.contains("active") || !currentChapterId) return;
@@ -978,7 +996,7 @@ window.addEventListener("scroll", saveReadingProgress, { passive: true });
 function toggleTheme(): void {
   const light = document.body.classList.toggle("light");
   localStorage.setItem("panpan-theme", light ? "light" : "dark");
-  toast(light ? t("toast_light_mode") : t("toast_dark_mode"));
+  toast(light ? "Light mode enabled." : "Dark mode enabled.");
 }
 function loadTheme(): void {
   const saved = localStorage.getItem("panpan-theme");
@@ -1040,14 +1058,15 @@ window.addEventListener("popstate", (e) => {
   const s = location.hash;
   if (s.startsWith("#read-")) {
     const [mangaId, chapterId] = s.replace("#read-", "").split("::");
-    if (mangaId && chapterId) openReader(chapterId, mangaId);
+    if (mangaId && chapterId) openReader(chapterId, mangaId, true);
     else goHome();
-  } else if (s.startsWith("#comic-")) openComic(s.replace("#comic-", ""));
-  else if (s === "#explore") showExplore();
-  else if (s === "#account") openAccount("overview");
-  else if (s === "#faq") openFAQ();
-  else if (s === "#about") openAbout();
-  else if (s === "#legal") openLegal((e.state as { title?: string } | null)?.title || "Terms of Use");
+  } else if (s.startsWith("#comic-")) openComic(s.replace("#comic-", ""), true);
+  else if (s === "#explore") showExplore(true);
+  else if (s === "#library") openLibrary(true);
+  else if (s === "#account") openAccount("overview", true);
+  else if (s === "#faq") openFAQ(true);
+  else if (s === "#about") openAbout(true);
+  else if (s === "#legal") openLegal((e.state as { title?: string } | null)?.title || "Terms of Use", true);
   else goHome();
 });
 function renderBuildVersion(): void {
@@ -1057,18 +1076,7 @@ function renderBuildVersion(): void {
   el.textContent = `· Build ${d.toISOString().slice(0, 16).replace("T", " ")} UTC`;
 }
 
-function refreshLoginButton(): void {
-  const btn = $("loginBtn") as HTMLButtonElement;
-  btn.textContent = currentUser ? t("logout") : t("login");
-  btn.onclick = currentUser ? logout : openLogin;
-}
-function toggleLang(): void {
-  setLang(getLang() === "id" ? "en" : "id");
-  refreshLoginButton();
-}
-
 loadTheme();
-applyI18n();
 renderBuildVersion();
 renderGenreChips();
 renderTrendingToday();
@@ -1080,8 +1088,11 @@ renderHomeGenre("All");
 
 onAuthChange((user) => {
   currentUser = user;
-  refreshLoginButton();
-  if (!user && $("accountView").classList.contains("active")) goHome();
+  const btn = $("loginBtn") as HTMLButtonElement;
+  btn.textContent = user ? "Logout" : "Login";
+  btn.onclick = user ? logout : openLogin;
+  if (!user && ($("accountView").classList.contains("active") || $("libraryView").classList.contains("active")))
+    goHome();
 });
 
 // The markup still relies on inline `onclick="fn(...)"` handlers, so the
@@ -1104,6 +1115,7 @@ Object.assign(window, {
   logout,
   loadMoreComments,
   submitComment,
+  openLibrary,
   openAccount,
   accountTab,
   toggleMobileMenu,
@@ -1128,5 +1140,4 @@ Object.assign(window, {
   openCurrentReader,
   startReading,
   rateComic,
-  toggleLang,
 });
