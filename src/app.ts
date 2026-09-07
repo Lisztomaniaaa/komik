@@ -536,13 +536,12 @@ async function openComic(id: string): Promise<void> {
     $("detailTitle").textContent = c.title;
     $("detailGenre").textContent = c.type + " · " + c.genres.join(" · ");
     $("detailDesc").textContent = c.desc;
-    $("detailRating").textContent = String(c.rating);
-    $("detailRatingBig").textContent = String(c.rating);
-    $("detailRatingCount").textContent = c.readers;
-    // The chapter count from the detail page can lag the actual chapter
-    // feed, so prefer the highest chapter number actually fetched.
-    const latestChapterNumber = chapters[0]?.chapterNumber ?? c.chapters;
-    $("detailChapters").textContent = String(latestChapterNumber);
+    loadRatingSummary(id);
+    // c.chapters is chapters.length from the same fetch — the true count.
+    // (Showing chapters[0]'s chapter *number* instead used to display "0"
+    // whenever the newest chapter happened to be numbered 0, e.g. a
+    // prologue, even though the title clearly has chapters.)
+    $("detailChapters").textContent = String(chapters.length || c.chapters);
     $("detailReaders").textContent = c.readers;
     $("detailChips").innerHTML =
       c.genres.map((g) => `<span class="chip">${g}</span>`).join("") +
@@ -750,6 +749,41 @@ function requireLogin(): boolean {
   }
   return true;
 }
+let ratingRequestId = 0;
+function renderRatingStars(filled: number): void {
+  document.querySelectorAll<HTMLButtonElement>("#detailRatingStars .starBtn").forEach((btn) => {
+    btn.classList.toggle("filled", Number(btn.dataset.star) <= filled);
+  });
+}
+async function loadRatingSummary(mangaId: string): Promise<void> {
+  const requestId = ++ratingRequestId;
+  renderRatingStars(0);
+  $("detailRatingBig").textContent = "–";
+  $("detailRatingCount").textContent = "0";
+  if (!firebaseConfigured) return;
+  const { fetchRatingSummary } = await import("./ratings");
+  const { average, count, userStars } = await fetchRatingSummary(mangaId, currentUser?.uid);
+  if (requestId !== ratingRequestId) return;
+  $("detailRatingBig").textContent = count ? average.toFixed(1) : "–";
+  $("detailRating").textContent = count ? average.toFixed(1) : "0";
+  $("detailRatingCount").textContent = String(count);
+  renderRatingStars(userStars ?? Math.round(average));
+}
+async function rateComic(stars: number): Promise<void> {
+  if (!requireLogin()) return;
+  if (!firebaseConfigured) {
+    toast("Ratings aren't set up yet.");
+    return;
+  }
+  try {
+    const { submitRating } = await import("./ratings");
+    await submitRating(currentComic, currentUser!.uid, stars);
+    toast("Thanks for rating!");
+    loadRatingSummary(currentComic);
+  } catch {
+    toast("Couldn't save your rating, try again.");
+  }
+}
 function commentHtml(row: CommentRow): string {
   const when = new Date(row.created_at).toLocaleDateString();
   return `<div class="comment"><p>${escapeHtml(row.body)}</p><b>${escapeHtml(row.name)}</b><small>${when}</small></div>`;
@@ -887,7 +921,7 @@ async function accountTab(tab: AccountTab): Promise<void> {
   if (tab === "profile")
     p.innerHTML = `<div class="eyebrow">Profile</div><h2>About you.</h2><p>Public information shown on your profile.</p><div class="setting"><div><strong>Display name</strong><small>${escapeHtml(displayName)}</small></div></div><div class="setting"><div><strong>Email</strong><small>${escapeHtml(currentUser?.email || "—")}</small></div><span class="typeBadge">EMAIL</span></div><div class="setting"><div><strong>Signed in with</strong><small>Email &amp; password</small></div><span class="statusBadge">CONNECTED</span></div>`;
   if (tab === "library") {
-    p.innerHTML = `<div class="eyebrow">Library</div><h2>My library.</h2><p>Titles you follow are kept here.</p><div class="grid" id="libraryList">Loading…</div>`;
+    p.innerHTML = `<div class="eyebrow">Library</div><h2>My library.</h2><p>Titles you follow, and where you left off.</p><h3 style="margin:24px 0 12px">Following</h3><div class="grid" id="libraryList">Loading…</div><h3 style="margin:32px 0 12px">Reading history</h3><div class="accountList" id="historyList">Loading…</div>`;
     const ids = [...followed];
     const comicsList = await Promise.all(ids.map((id) => comicBy(id).catch(() => null)));
     const list = document.getElementById("libraryList");
@@ -898,14 +932,14 @@ async function accountTab(tab: AccountTab): Promise<void> {
           .map((c) => cardHtml(c))
           .join("") ||
         '<div class="empty" style="grid-column:1/-1">Your library is empty — follow a comic to see it here.</div>';
-  }
-  if (tab === "history")
-    p.innerHTML = `<div class="eyebrow">Reading</div><h2>Reading history.</h2><p>Demo progress saved for this session.</p><div class="accountList" id="historyList">Loading…</div>`;
-  if (tab === "history") {
+
+    const HISTORY_LIMIT = 20;
     const saved: Record<string, ReadingProgressEntry> = JSON.parse(
       localStorage.getItem("panpan-progress") || "{}",
     );
-    const entries = Object.entries(saved).sort((a, b) => b[1].updated - a[1].updated);
+    const entries = Object.entries(saved)
+      .sort((a, b) => b[1].updated - a[1].updated)
+      .slice(0, HISTORY_LIMIT);
     const rows = await Promise.all(
       entries.map(async ([key, progress]) => {
         const [mangaId, chapterId] = key.split("::");
@@ -917,8 +951,8 @@ async function accountTab(tab: AccountTab): Promise<void> {
         }
       }),
     );
-    const list = document.getElementById("historyList");
-    if (list) list.innerHTML = rows.join("") || '<div class="empty">No reading history yet.</div>';
+    const historyList = document.getElementById("historyList");
+    if (historyList) historyList.innerHTML = rows.join("") || '<div class="empty">No reading history yet.</div>';
   }
   if (tab === "notifications")
     p.innerHTML = `<div class="eyebrow">Notifications</div><h2>Stay updated.</h2><p>New chapters from followed titles appear here.</p><div class="accountList"><div class="empty">This is a demo — notifications are not tracked live.</div></div>`;
@@ -1084,4 +1118,5 @@ Object.assign(window, {
   hideSearchResults,
   openCurrentReader,
   startReading,
+  rateComic,
 });

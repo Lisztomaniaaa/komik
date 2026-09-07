@@ -72,7 +72,7 @@
 <section class="section"><div class="sectionHead"><h2>Trending today</h2><a href="#" onclick="showExplore();return false">View all →</a></div>
 <div id="trendingTodayTrack" class="grid"></div><div id="trendingTodayPagination" class="pagination"></div></section>
 
-<section class="section"><div class="sectionHead"><h2>Continue reading</h2><a href="#" onclick="openAccount('history');return false">History →</a></div>
+<section class="section"><div class="sectionHead"><h2>Continue reading</h2><a href="#" onclick="openAccount('library');return false">Library →</a></div>
 <div id="continueReading" class="list"></div></section>
 
 <section class="section" id="latest"><div class="sectionHead"><h2>Latest updates</h2><a href="#" onclick="showExplore();return false">View all →</a></div>
@@ -105,7 +105,7 @@
 <section id="detailView" class="view">
 <div class="detail"><button class="back" onclick="goBackFromDetail()"><svg class="svgIcon" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"></path></svg><span>Back</span></button>
 <div class="detailHero"><div class="detailCover" id="detailCover"></div><div class="detailIntro"><div class="eyebrow" id="detailGenre">ACTION · FANTASY</div><h1 id="detailTitle">Solo Leveling</h1><p id="detailDesc"></p><div class="chips" id="detailChips"></div><div class="stats"><div><b id="detailRating">4.9</b>Rating</div><div><b id="detailChapters">200</b>Chapters</div><div><b id="detailReaders">12.4K</b>Readers</div></div><button id="followBtn" class="secondary followBtn" onclick="toggleFollow()">Follow</button></div></div>
-<div class="ratingSummary"><div><div class="ratingBig" id="detailRatingBig">4.9</div><div class="ratingStars">★★★★★</div></div><div><strong>Reader rating</strong><div class="ratingMeta"><span id="detailRatingCount">2,481</span> ratings · Community score</div></div></div>
+<div class="ratingSummary"><div><div class="ratingBig" id="detailRatingBig">–</div><div class="ratingStars" id="detailRatingStars" role="group" aria-label="Rate this comic"><button type="button" class="starBtn" data-star="1" onclick="rateComic(1)">★</button><button type="button" class="starBtn" data-star="2" onclick="rateComic(2)">★</button><button type="button" class="starBtn" data-star="3" onclick="rateComic(3)">★</button><button type="button" class="starBtn" data-star="4" onclick="rateComic(4)">★</button><button type="button" class="starBtn" data-star="5" onclick="rateComic(5)">★</button></div></div><div><strong>Reader rating</strong><div class="ratingMeta"><span id="detailRatingCount">0</span> ratings · Tap a star to rate</div></div></div>
 <div class="chapterBox"><div class="sectionHead"><h2>Chapters</h2><span style="color:#777;font-size:12px">Latest first</span></div><div id="chapterList"></div></div>
 <div class="comments"><div class="sectionHead"><h2>Comments & reviews</h2><span style="color:#777;font-size:12px">Reader discussion</span></div><div class="commentGrid" id="detailComments"></div><div class="loadMoreWrap"><button class="loadMoreBtn" onclick="loadMoreComments('detailComments')">Load more comments</button></div>
 <div class="reviewForm"><b>Leave a review.</b><textarea id="detailComment" placeholder="Write your experience..."></textarea><button class="primary" onclick="submitComment('detail')">Post review</button></div>
@@ -122,11 +122,9 @@
 <section id="accountView" class="view">
 <div class="account"><div class="eyebrow">Account center</div><h1 style="font-size:54px;margin-bottom:8px">Your account.</h1><p style="color:#888">Manage your profile, library, reading history and preferences.</p>
 <div class="accountLayout">
-<aside class="accountSide"><div class="avatar" id="accountAvatar">R</div><h3 id="accountName">Reader</h3><small id="accountEmail">—</small><div class="role">READER</div><div class="accountTabs">
+<aside class="accountSide"><div class="avatar" id="accountAvatar">R</div><h3 id="accountName">Reader</h3><small id="accountEmail">—</small><div class="accountTabs">
 <button class="accountTab active" data-tab="overview" onclick="accountTab('overview')">Overview</button>
-<button class="accountTab" data-tab="library" onclick="accountTab('library')">My library</button>
-<button class="accountTab" data-tab="history" onclick="accountTab('history')">Reading history</button>
-<button class="accountTab" data-tab="profile" onclick="accountTab('profile')">Profile</button>
+<button class="accountTab" data-tab="library" onclick="accountTab('library')">My library</button><button class="accountTab" data-tab="profile" onclick="accountTab('profile')">Profile</button>
 <button class="accountTab" data-tab="notifications" onclick="accountTab('notifications')">Notifications</button>
 <button class="accountTab" data-tab="settings" onclick="accountTab('settings')">Settings</button>
 <button class="accountTab" data-tab="security" onclick="accountTab('security')">Security</button>

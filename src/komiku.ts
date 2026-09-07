@@ -187,6 +187,12 @@ interface ListCursor {
 }
 const listCursors = new Map<string, ListCursor>();
 const MAX_UNDERLYING_FETCHES = 8;
+// Underlying pages are fetched a batch at a time (instead of one await per
+// round-trip) since Komiku pages are independently addressable by number —
+// this cut a 5-round-trip type-filter fetch from ~5 sequential latencies to
+// ~2 parallel rounds. Pages fetched past the real last page just come back
+// empty and are safely discarded once `hasMore: false` is seen.
+const BATCH_SIZE = 4;
 
 async function accumulate(
   key: string,
@@ -200,11 +206,18 @@ async function accumulate(
   }
   let fetches = 0;
   while (cursor.buffer.length < need && !cursor.exhausted && fetches < MAX_UNDERLYING_FETCHES) {
-    const { items, hasMore } = await fetchRealPage(cursor.nextRealPage);
-    cursor.buffer.push(...items);
-    cursor.nextRealPage += 1;
-    if (!hasMore) cursor.exhausted = true;
-    fetches += 1;
+    const batchCount = Math.min(BATCH_SIZE, MAX_UNDERLYING_FETCHES - fetches);
+    const startPage = cursor.nextRealPage;
+    const results = await Promise.all(
+      Array.from({ length: batchCount }, (_, i) => fetchRealPage(startPage + i)),
+    );
+    for (const { items, hasMore } of results) {
+      if (cursor.exhausted) break;
+      cursor.buffer.push(...items);
+      cursor.nextRealPage += 1;
+      if (!hasMore) cursor.exhausted = true;
+    }
+    fetches += batchCount;
   }
   return cursor;
 }
@@ -287,9 +300,11 @@ export interface Genre {
 }
 
 // Komiku's own genre list, minus explicit/adult-content tags (this is a
-// browsable genre list, not an explicit-content finder) and a few garbled
-// or duplicate scrape artifacts (e.g. both "martial-art" and
-// "martial-arts" exist as separate tags for the same genre).
+// browsable genre list, not an explicit-content finder), a few garbled or
+// duplicate scrape artifacts (e.g. both "martial-art" and "martial-arts"
+// exist as separate tags for the same genre), and tags confirmed dead —
+// checked directly against /genre/<slug>/page/1 for every tag Komiku
+// lists; these returned zero manga despite being real, listed genres.
 const EXCLUDED_GENRE_SLUGS = new Set([
   "adult",
   "ecchi",
@@ -302,6 +317,16 @@ const EXCLUDED_GENRE_SLUGS = new Set([
   "one-shot",
   "shoujog",
   "mangatoon",
+  "4-koma",
+  "adaptation",
+  "businessman",
+  "kids",
+  "magical-girls",
+  "modern",
+  "office-workers",
+  "web-comic",
+  "xianxia",
+  "xuanhuan",
 ]);
 
 let genresCache: Genre[] | null = null;
