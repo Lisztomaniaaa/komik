@@ -16,7 +16,6 @@ src/auth.ts           login/signup/logout via Firebase Authentication (email & p
 src/comments.ts       fetch/post komentar & review ke Firestore — lihat "Setup Firebase" di bawah
 src/views.ts          counter view harian di Firestore, buat section "Trending today"
 src/ratings.ts        tap-to-rate komik (terpisah dari komentar) — lihat "Rating komik" di bawah
-src/i18n.ts           kamus string UI Indonesia/Inggris — lihat "Bahasa" di bawah
 src/app.ts           seluruh logic aplikasi (navigasi, filter, reader, login, dsb.)
 src/uiChrome.ts       perilaku menu mobile/drawer
 src/main.ts           entry point, cuma import file-file di atas
@@ -164,26 +163,6 @@ filter+`orderBy` (itu butuh composite index manual di Firestore, sudah
 dicek langsung ke dokumentasinya) — pengurutan komentar dilakukan di sisi
 JS, bukan di query, supaya nol langkah index manual di Firebase Console.
 
-## Bahasa (Indonesia default)
-
-UI aplikasi (bukan konten komik — itu sudah bahasa Indonesia dari sananya,
-lihat "Catatan lain" di bawah) sekarang punya dua bahasa: **Indonesia
-(default)** dan Inggris, lewat tombol "ID"/"EN" di top bar. Pilihan
-tersimpan di localStorage (`panpan-lang`) jadi tetap kepakai di kunjungan
-berikutnya. Implementasinya di `src/i18n.ts` — kamus string sederhana
-(bukan library i18n), dipasang lewat atribut `data-i18n` /
-`data-i18n-placeholder` / `data-i18n-title` di `index.html`, plus
-pemanggilan `t()` langsung untuk teks yang di-generate dari
-`src/app.ts` (toast, label tombol dinamis, dll.).
-
-**Cakupan saat ini**: nav, beranda, explore, detail komik, reader, akun,
-form login, footer, dan semua pesan toast/loading/error sudah diterjemahkan.
-**Halaman FAQ, About, dan Legal (Terms/Privacy/dll.) masih bahasa Inggris
-saja** untuk sementara — isinya panjang dan menyangkut kebijakan, jadi
-sengaja tidak buru-buru diterjemahkan di batch ini supaya tidak ada
-salah-terjemah pada bagian yang sensitif. Nama genre dan tipe komik
-(Manga/Manhwa/Manhua) tidak diterjemahkan karena itu istilah baku.
-
 ## Rating komik (tap-to-rate)
 
 Komiku sendiri tidak punya data rating (lihat `NO_RATING` di `src/komiku.ts`),
@@ -210,10 +189,13 @@ supaya collection `ratings` ikut ke-cover.
   sudah live lewat Komiku (lihat "Sumber data" di atas).
 - Progress baca (`panpan-progress` di localStorage) dipakai buat mengisi
   section "Continue reading" di homepage dan bagian "Reading history" di
-  tab Library (dibatasi 20 entri terakhir).
-- Tab "My library" dan "Reading history" di Account sudah digabung jadi satu
-  tab **Library**: bagian atas judul yang di-follow, bagian bawah riwayat
-  baca. Sidebar akun tidak lagi menampilkan badge role ("READER") — sudah
+  halaman Library (dibatasi 20 entri terakhir).
+- **Library punya halaman sendiri**, terpisah dari Account — dulu itu cuma
+  salah satu tab di dalam Account (dengan sidebar Profile/Notifications/
+  Settings/Security di sekelilingnya, terasa seperti "pengaturan akun"
+  padahal isinya cuma daftar komik). Sekarang Library (judul yang di-follow
+  + riwayat baca) berdiri sendiri tanpa sidebar akun sama sekali. Sidebar
+  akun sendiri juga tidak lagi menampilkan badge role ("READER") — sudah
   dihapus karena tidak dipakai untuk apa-apa.
 - Reader (halaman baca chapter) sekarang benar-benar full-width, tidak ada
   lagi ruang kosong di kiri-kanan gambar komik.
@@ -232,8 +214,24 @@ supaya collection `ratings` ikut ke-cover.
   yang tampil duluan dengan tombol "Show more" buat lihat sisanya.
 - Bottom navbar (Home/Explore/Library/Account) cuma muncul di layar sempit
   (≤900px) — di desktop navigasinya tetap lewat top bar seperti biasa.
-  "Library" dan "Account" sama-sama masuk ke halaman Account (tab berbeda),
-  keduanya butuh login.
+  "Library" dan "Account" adalah dua halaman terpisah, keduanya butuh login.
 - Search di top bar disembunyikan di layar ≤620px (kepentok lebar), diganti
   ikon kaca pembesar di sebelah hamburger menu yang membuka kotak
   pencariannya sebagai overlay.
+- Rating bintang (tap-to-rate) pakai ikon SVG, bukan karakter Unicode "★" —
+  beberapa font emoji di device tertentu render karakter itu dengan warna
+  sendiri yang mengabaikan CSS `color`, jadi cuma bintang yang baru dipencet
+  yang kelihatan menyala walau class "filled" sudah kepasang benar di semua
+  bintang di bawahnya. SVG dengan `fill:currentColor` tidak kena masalah ini.
+- Buka detail komik dan buka chapter dari situ dulu tarik `/detail-komik/<slug>`
+  dua kali terpisah (satu buat info komik, satu lagi buat daftar chapter) —
+  padahal itu endpoint yang sama persis. Sekarang cuma satu kali fetch buat
+  keduanya (`fetchComicWithChapters` di `src/komiku.ts`), jadi buka komik
+  jadi dua kali lebih ringan di endpoint yang paling sering dipanggil.
+- Tombol/navigasi "Back" (komik, reader, FAQ/About/Legal, Explore, Account,
+  Library) dulu bisa macet — balik ke halaman sebelumnya lewat back button
+  browser kadang tidak sampai ke Home, karena fungsi-fungsi itu selalu
+  push history entry baru walau dipanggil DARI event "kembali" itu sendiri,
+  jadi malah numpuk entry duplikat dan back-nya seperti tidak berefek.
+  Sekarang fungsi-fungsi itu tahu kalau dipanggil dari popstate (tombol
+  back/forward) dan tidak push lagi.

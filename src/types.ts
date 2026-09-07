@@ -37,7 +37,6 @@ export interface Filters {
 export type AccountTab =
   | "overview"
   | "profile"
-  | "library"
   | "notifications"
   | "settings"
   | "security";
