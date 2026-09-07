@@ -218,6 +218,20 @@ supaya collection `ratings` ikut ke-cover.
   level listing itu client-side" di atas) sekarang narik beberapa halaman
   sekaligus secara paralel (4 per giliran), bukan satu-satu — mempercepat
   filter yang jarang cocok tanpa menambah jumlah request-nya.
+- **Thumbnail cover kadang burik tergantung section**: dikonfirmasi lewat
+  curl langsung ke CDN Komiku, endpoint listing yang beda-beda minta ukuran
+  `?resize=W,H` yang beda-beda untuk KOMIK YANG SAMA — `/terbaru` (dipakai
+  "Latest updates" & fallback trending) minta 240×150 (~21KB), sedangkan
+  `/pustaka` (Explore) minta 450×235 (~48KB). Jadi burik-tidaknya sebuah
+  cover tergantung endpoint mana yang kebetulan nyediain datanya, bukan
+  komiknya. `proxiedImage()` di `src/komiku.ts` sekarang menyeragamkan
+  parameter `resize` itu ke 400×600 sebelum diproxy, siapapun sumbernya —
+  gambar halaman baca chapter (host & bentuk URL beda, tidak ada parameter
+  `resize` sama sekali) tidak tersentuh oleh perubahan ini. Soal keluhan
+  lag: dari pengukuran langsung, itu murni cold-start `/image-proxy` di
+  Vercel gratisan (~1 detik sekali pas dingin, lihat catatan di atas),
+  bukan soal ukuran gambar — sekali "panas", ukuran 21KB vs 108KB sama
+  cepatnya (±0.2-0.3 detik), jadi menaikkan resolusi ini tidak menambah lag.
 - Daftar genre (home & Explore) ditarik langsung dari endpoint `/genre-all`
   Komiku (~100 tag), bukan daftar hardcoded — lihat `EXCLUDED_GENRE_SLUGS`
   di `src/komiku.ts` untuk tag yang sengaja di-skip (konten eksplisit/dewasa
