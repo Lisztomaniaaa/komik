@@ -9,8 +9,28 @@ const API_BASE =
 
 // The API's own /image-proxy re-fetches komiku.* CDN images server-side
 // (with a host allowlist) and hands back a same-origin-friendly stream.
+//
+// Komiku's thumbnail CDN takes a `?resize=W,H` param, and different listing
+// endpoints request wildly different sizes for the exact same source image —
+// e.g. /terbaru asks for 240x150 while /pustaka asks for 450x235 for the
+// same cover, so which section a card came from (not the comic itself)
+// decided how blurry it looked. Reader page images (a different host, no
+// query string at all) are untouched — this only normalizes a `resize`
+// param that's already there, never adds one.
+const THUMBNAIL_SIZE = "400,600";
 function proxiedImage(url: string | null | undefined): string | null {
-  return url ? `${API_BASE}/image-proxy?url=${encodeURIComponent(url)}` : null;
+  if (!url) return null;
+  let normalized = url;
+  try {
+    const u = new URL(url);
+    if (u.searchParams.has("resize")) {
+      u.searchParams.set("resize", THUMBNAIL_SIZE);
+      normalized = u.toString();
+    }
+  } catch {
+    // Malformed URL — proxy it as-is rather than dropping the image.
+  }
+  return `${API_BASE}/image-proxy?url=${encodeURIComponent(normalized)}`;
 }
 
 async function getJson<T>(path: string): Promise<T> {
