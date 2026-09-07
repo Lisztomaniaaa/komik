@@ -84,6 +84,7 @@ footer{border-top:1px solid var(--line);padding:34px 0;color:#666;font-size:12px
 /* Icon system */
 .svgIcon{width:20px;height:20px;display:block;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .iconbtn.iconOnly{width:48px;padding:0;display:grid;place-items:center}
+.langBtn{font-weight:800;letter-spacing:.5px}
 .login{min-width:112px}
 .mobileDrawer{display:none}
 .loginOption{display:flex;align-items:center;justify-content:center;gap:11px}

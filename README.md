@@ -15,6 +15,8 @@ src/firebase.ts       init Firebase app dari env var (dipakai bareng oleh auth.t
 src/auth.ts           login/signup/logout via Firebase Authentication (email & password)
 src/comments.ts       fetch/post komentar & review ke Firestore — lihat "Setup Firebase" di bawah
 src/views.ts          counter view harian di Firestore, buat section "Trending today"
+src/ratings.ts        tap-to-rate komik (terpisah dari komentar) — lihat "Rating komik" di bawah
+src/i18n.ts           kamus string UI Indonesia/Inggris — lihat "Bahasa" di bawah
 src/app.ts           seluruh logic aplikasi (navigasi, filter, reader, login, dsb.)
 src/uiChrome.ts       perilaku menu mobile/drawer
 src/main.ts           entry point, cuma import file-file di atas
@@ -161,6 +163,26 @@ gantinya. Desain query komentarnya sengaja menghindari kombinasi
 filter+`orderBy` (itu butuh composite index manual di Firestore, sudah
 dicek langsung ke dokumentasinya) — pengurutan komentar dilakukan di sisi
 JS, bukan di query, supaya nol langkah index manual di Firebase Console.
+
+## Bahasa (Indonesia default)
+
+UI aplikasi (bukan konten komik — itu sudah bahasa Indonesia dari sananya,
+lihat "Catatan lain" di bawah) sekarang punya dua bahasa: **Indonesia
+(default)** dan Inggris, lewat tombol "ID"/"EN" di top bar. Pilihan
+tersimpan di localStorage (`panpan-lang`) jadi tetap kepakai di kunjungan
+berikutnya. Implementasinya di `src/i18n.ts` — kamus string sederhana
+(bukan library i18n), dipasang lewat atribut `data-i18n` /
+`data-i18n-placeholder` / `data-i18n-title` di `index.html`, plus
+pemanggilan `t()` langsung untuk teks yang di-generate dari
+`src/app.ts` (toast, label tombol dinamis, dll.).
+
+**Cakupan saat ini**: nav, beranda, explore, detail komik, reader, akun,
+form login, footer, dan semua pesan toast/loading/error sudah diterjemahkan.
+**Halaman FAQ, About, dan Legal (Terms/Privacy/dll.) masih bahasa Inggris
+saja** untuk sementara — isinya panjang dan menyangkut kebijakan, jadi
+sengaja tidak buru-buru diterjemahkan di batch ini supaya tidak ada
+salah-terjemah pada bagian yang sensitif. Nama genre dan tipe komik
+(Manga/Manhwa/Manhua) tidak diterjemahkan karena itu istilah baku.
 
 ## Rating komik (tap-to-rate)
 
