@@ -58,7 +58,6 @@ let readerVisibleCount = COMMENTS_PAGE_SIZE;
 // shouldn't refetch what we already have).
 const mangaCache = new Map<string, Comic>();
 const chaptersCache = new Map<string, ChapterEntry[]>();
-let trendingTop: Comic | null = null;
 
 function debounce<A extends unknown[]>(fn: (...args: A) => void, ms: number): (...args: A) => void {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -334,7 +333,6 @@ async function renderTrending(): Promise<void> {
   try {
     if (!trendingAllTimePool) {
       trendingAllTimePool = await fetchTrendingAllTime();
-      trendingTop = trendingAllTimePool[0] ?? null;
     }
     const pool = trendingAllTimePool;
     const pages = Math.max(1, Math.ceil(pool.length / PAGE_SIZE));
@@ -451,11 +449,6 @@ async function renderContinueReading(): Promise<void> {
     box.innerHTML = '<div class="empty">You have not started reading anything yet.</div>';
   }
 }
-function startReading(): void {
-  if (trendingTop) openComic(trendingTop.id);
-  else showExplore();
-}
-
 function openFAQ(fromPopState = false): void {
   hideViews();
   $("faqView").classList.add("active");
@@ -1143,6 +1136,5 @@ Object.assign(window, {
   setLatestType,
   hideSearchResults,
   openCurrentReader,
-  startReading,
   rateComic,
 });
