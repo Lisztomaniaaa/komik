@@ -1,8 +1,9 @@
 import { collection, doc, getDocs, getFirestore, setDoc } from "firebase/firestore";
 import { app } from "./firebase";
 
-// Komiku has no rating data of its own (see NO_RATING in src/komiku.ts), so
-// the "reader rating" shown on a comic's page is our own tap-to-rate widget —
+// Sansekai does report its own aggregate user_rate per title (used for
+// Comic.rating, shown on cards/search results), but the "reader rating"
+// widget on a comic's page is a separate, first-party tap-to-rate feature —
 // deliberately separate from the text comment system. One doc per user per
 // manga (`ratings/{mangaId}/users/{uid}`) so a rule can enforce "only your
 // own rating, 1-5 stars"; the average is just computed client-side over that
