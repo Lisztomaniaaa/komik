@@ -8,7 +8,7 @@ import {
   fetchList,
   fetchTrendingAllTime,
   quickSearch,
-} from "./komiku";
+} from "./sansekai";
 import type {
   AccountTab,
   ChapterEntry,
@@ -29,8 +29,8 @@ function $(id: string): HTMLElement {
 }
 
 // Solo Leveling — used only to seed the demo's "already following one
-// title" starting state with a manga slug that actually exists on Komiku.
-const SEED_FOLLOWED_ID = "solo-leveling-id";
+// title" starting state with a manga_id that actually exists on Sansekai.
+const SEED_FOLLOWED_ID = "5c612573-fe38-42df-8618-dc3de1c9d04a";
 
 let filters: Filters = { type: "All", genre: "All", status: "All" };
 let currentComic = "";
@@ -186,7 +186,7 @@ async function renderExplore(): Promise<void> {
     renderPagination("explorePagination", explorePage, pages, "setExplorePage", total);
   } catch {
     if (requestId !== exploreRequestId) return;
-    grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Failed to load comics from Komiku.</div>';
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Failed to load comics from Sansekai.</div>';
   }
 }
 let homeGenreRequestId = 0;
@@ -211,7 +211,7 @@ async function renderHomeGenre(genre = "All"): Promise<void> {
     renderPagination("genrePagination", homeGenrePage, pages, "setHomeGenrePage", total);
   } catch {
     if (requestId !== homeGenreRequestId) return;
-    grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Failed to load comics from Komiku.</div>';
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Failed to load comics from Sansekai.</div>';
   }
 }
 let genreChipsRendered = false;
@@ -427,7 +427,7 @@ async function renderLatestUpdates(): Promise<void> {
     renderPagination("latestPagination", latestPage, pages, "setLatestPage", total);
   } catch {
     if (requestId !== latestRequestId) return;
-    grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Failed to load comics from Komiku.</div>';
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Failed to load comics from Sansekai.</div>';
   }
 }
 async function renderContinueReading(): Promise<void> {
@@ -603,9 +603,9 @@ async function openReader(chapterId: string, id: string = currentComic, fromPopS
     const { comic: c, chapters } = await comicWithChapters(id);
     if (requestId !== openReaderRequestId) return;
     const entry = chapters.find((e) => e.id === chapterId);
-    // Komiku sometimes serves a title's chapters under a different slug than
-    // its detail page (see ChapterEntry.readerSlug), so this can't be
-    // fetched in parallel with the chapter list above — it needs `entry`.
+    // Sansekai's reader only needs chapterId (readerSlug is a vestige of
+    // Komiku's slug-mismatch quirk, see ChapterEntry.readerSlug) — kept as
+    // a second param for interface parity, but fetchChapterPages ignores it.
     const pages = await fetchChapterPages(entry?.readerSlug ?? id, chapterId);
     if (requestId !== openReaderRequestId) return;
     $("readerTitle").textContent = c.title + " · " + (entry?.label ?? "Chapter");
@@ -634,7 +634,7 @@ async function openReader(chapterId: string, id: string = currentComic, fromPopS
     if (requestId !== openReaderRequestId) return;
     $("readerTitle").textContent = "Failed to load this chapter.";
     ($("readerView").querySelector(".page") as HTMLElement).innerHTML =
-      '<div class="empty">Failed to load pages from Komiku.</div>';
+      '<div class="empty">Failed to load pages from Sansekai.</div>';
   }
 }
 function changeChapter(v: string): void {

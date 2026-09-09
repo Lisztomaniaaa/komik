@@ -6,7 +6,7 @@ import { app } from "./firebase";
 // comic pay for pulling in firebase/firestore.
 const db = app ? getFirestore(app) : null;
 
-// Komiku has no view/read-count data of its own (see src/komiku.ts), so
+// Sansekai has view_count per title, but nothing scoped to "today" — so
 // "trending today" is tracked ourselves: one counter document per manga per
 // day, reset automatically just by the date changing. `views/<date>/mangas`
 // is a plain collection (no equality filter needed to scope it to a day),
