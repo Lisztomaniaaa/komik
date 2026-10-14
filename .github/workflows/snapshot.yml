@@ -1,0 +1,44 @@
+name: Snapshot comic data
+
+# Keeps the `snapshot` branch stocked with fresh catalog JSON so the
+# app can serve its discovery surfaces (home, explore, genre/type
+# browsing) from static files instead of live calls to the community
+# provider instances. See scripts/snapshot.mjs for the format and the
+# README's "Sumber data" section for the architecture. A failed run
+# publishes nothing — the previous snapshot keeps serving.
+
+on:
+  schedule:
+    # Every ~30 minutes, offset from the top of the hour.
+    - cron: "13,43 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Generate snapshot
+        run: node scripts/snapshot.mjs --out out
+
+      - name: Publish to snapshot branch (single-commit orphan)
+        run: |
+          cd out
+          git init -b snapshot
+          git config user.name "komikvibe-snapshot[bot]"
+          git config user.email "snapshot@users.noreply.github.com"
+          git add -A
+          git commit -m "Snapshot $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git push --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" HEAD:snapshot
