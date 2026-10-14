@@ -1,6 +1,6 @@
 # komik
 
-KomikVibe — comic reader frontend, data komik dari lapisan multi-provider dengan fallback otomatis (dua instance format Sanka + MangaDex) — lihat "Sumber data" di bawah.
+KomikVibe — comic reader frontend, data komik dari snapshot katalog terjadwal (dibangun dari dua instance format Sanka + fallback live MangaDex) — lihat "Sumber data" di bawah.
 
 ## Stack
 
@@ -10,8 +10,9 @@ TypeScript murni + Vite (tanpa framework seperti React/Vue). Struktur:
 index.html         markup halaman (semua view: home, explore, detail, reader, account, dst.)
 src/style.css       semua styling (dark theme)
 src/types.ts        tipe data (Comic, ChapterEntry, Filters, CommentRow, dll.)
-src/comicApi.ts       lapisan data multi-provider — client format Sanka (2 instance) + MangaDex, failover otomatis, mapping ke tipe Comic, caching per sesi
-api/proxy.ts          edge proxy + cache Vercel untuk instance Sanka (transport produksi default di comicApi.ts)
+src/comicApi.ts       lapisan data komik — snapshot-first, di bawahnya client format Sanka (2 instance) + MangaDex dengan failover otomatis, mapping ke tipe Comic, caching per sesi
+scripts/snapshot.mjs  generator snapshot katalog (dijalankan GitHub Actions tiap ~30 menit, hasil ke branch `snapshot`)
+public/sw.js          service worker — cache stale-while-revalidate untuk JSON katalog + cache-first untuk gambar
 src/firebase.ts       init Firebase app dari env var (dipakai bareng oleh auth.ts & comments.ts)
 src/auth.ts           login/signup/logout via Firebase Authentication (email & password)
 src/comments.ts       fetch/post komentar & review ke Firestore — lihat "Setup Firebase" di bawah
@@ -31,107 +32,98 @@ tidak otomatis bocor ke global scope.
 
 ```sh
 npm install
-npm run dev       # dev server dengan hot reload, http://local## Sumber data: multi-provider dengan fallback otomatis
+npm run dev       # dev server dengan hot reload, http://local## Sumber data: snapshot terjadwal + fallback live
 
-Riwayat sumber data app ini adalah riwayat kematian: scraper Komikcast,
-lalu MangaDex, lalu fork self-hosted dari
-[VernSG/Komiku-Rest-Api](https://github.com/VernSG/Komiku-Rest-Api)
-(banyak endpoint mati/timeout), lalu Sansekai API — yang endpoint
-datanya mulai menjawab 403 di Oktober 2026. Empat kali sumber mati,
-empat kali app ikut mati, karena selalu cuma ada SATU sumber dan tidak
-ada fallback (README versi sebelumnya bahkan menulis persis risiko
-ini). Perbaikannya kali ini struktural, bukan ganti sumber lagi:
-`src/comicApi.ts` adalah lapisan provider dengan urutan prioritas:
+Riwayat sumber data app ini adalah riwayat kematian: scraper
+Komikcast, lalu MangaDex, lalu fork self-hosted Komiku (endpoint
+mati/timeout), lalu Sansekai (403 mulai Oktober 2026) — empat kali
+sumber mati, empat kali app ikut mati. Perbaikan pertama (PR #12)
+adalah lapisan provider dengan failover otomatis: browser bicara ke
+dua instance format Sanka (KomikCast, KomikIndo) + MangaDex, satu
+mati = degradasi. Itu menyelesaikan *keandalan*, tapi bukan
+*kecepatan*: origin-nya memang lambat (terukur: KomikIndo TTFB
+~0,35 dtk; tunnel KomikCast ~1–1,7 dtk dengan spike sampai 14 dtk;
+payload sendiri cuma 12–22 KB, jadi murni soal round trip).
 
-1. **sanka-komikcast** — katalog KomikCast dalam format JSON "Sanka"
-   (https://komikcast.aoxi.my.id/comic/komikcast, instance publik dari
-   repo FmcStore/komikcast-api).
-2. **sanka-komikindo** — katalog KomikIndo, format Sanka yang sama
-   (https://www.sankavollerei.web.id/comic/komikindo).
-3. **mangadex** — API resmi MangaDex (https://api.mangadex.org).
+Perbaikan kedua (PR #13) mencoba edge proxy Vercel di depan instance
+Sanka — dan gagal secara terukur, post-mortem-nya penting: cache CDN
+Vercel itu per-region, jadi dengan TTL 60 detik di path panas
+(latest/search) dan traffic yang tipis, entry cache di PoP terdekat
+hampir selalu sudah basi sebelum sempat dipakai ulang (nyaris 100%
+MISS), sementara jalur MISS lewat proxy justru 2,7–3,1 dtk lawan
+0,35 dtk direct. Kesimpulan yang jujur: **browser tidak boleh
+bergantung pada panggilan live ke API komunitas untuk permukaan
+panasnya.** Arsitektur sekarang (PR #14) membalik arah itu — datanya
+yang dipindah mendekat, bukan request-nya yang diperantarai:
 
-Cara kerjanya:
+1. **Snapshot terjadwal (jalur utama).** Workflow GitHub Actions
+   `snapshot` menjalankan `scripts/snapshot.mjs` tiap ~30 menit:
+   mengambil katalog dari provider di sisi server (KomikIndo utama,
+   KomikCast cadangan), menormalkan ke bentuk `Comic`, menulis ulang
+   URL cover lewat pipeline gambar (lihat bawah), lalu menerbitkan
+   JSON ke branch `snapshot` (satu commit orphan, force-push):
+   `data/home.json` (trending + latest + daftar genre),
+   `data/genre-<slug>.json` dan `data/type-<type>.json` (halaman
+   pertama per filter). App membacanya lewat
+   raw.githubusercontent.com (CDN GitHub, CORS `*`, cache 300 dtk).
+   Run yang gagal atau hasilnya terlalu tipis **tidak menerbitkan
+   apa-apa** — snapshot lama tetap melayani. Sumber mati sekarang
+   berarti data basi maksimal ~1 jam, bukan app mati; dan instance
+   sumber cuma disentuh ~100 request per run berapapun traffic app.
+2. **Service worker** (`public/sw.js`) — stale-while-revalidate
+   untuk JSON katalog (snapshot DAN API live), cache-first untuk
+   gambar (maks 200 entri, ≤2,5 MB per gambar), navigasi
+   network-first, aset build cache-first. Firebase tidak pernah
+   disentuh worker. Kunjungan berulang render dari perangkat
+   (~0 ms) sementara satu request latar menyegarkan cache.
+3. **Rantai provider live (cadangan).** `src/comicApi.ts` tetap
+   menyimpan client Sanka (KomikIndo → KomikCast) + MangaDex dengan
+   failover + transport terakhir yang berhasil diingat di
+   localStorage — untuk yang tidak dicover snapshot: paginasi dalam
+   melewati tepi snapshot, filter gabungan genre+type, pencarian,
+   dan detail + isi chapter (long tail memang selalu live, di-route
+   ke katalog pemilik komiknya lewat id ber-namespace
+   `sanka-komikindo:<slug>` / `mangadex:<uuid>`, yang juga jadi kunci
+   Firestore untuk komentar/rating/view counter).
 
-- **Satu format, dua instance.** Response kedua instance Sanka identik
-  bentuknya, jadi satu client melayani keduanya. Panggilan discovery
-  (list, search, trending, latest, daftar genre) otomatis failover:
-  provider yang error ditandai down selama 60 detik dan dilewati — satu
-  sumber mati = app degradasi, bukan mati total.
-- **Detail & chapter TIDAK failover lintas provider** — isi sebuah
-  komik tinggal di provider yang menemukannya. Karena itu `Comic.id`
-  dan `ChapterEntry.id` di-namespace per provider
-  (`sanka-komikcast:<slug>`, `mangadex:<uuid>`) dan di-route balik ke
-  pemiliknya; namespace ini ikut menjadi kunci Firestore (komentar,
-  rating, dan view counter memang keyed by id komik). Id tanpa prefix
-  (bookmark era Sansekai) ditebak sebagai slug Sanka.
-- **MangaDex sengaja terakhir**: API resminya praktis tidak bisa mati,
-  tapi katalog terjemahan Indonesianya tipis dibanding katalog Indo
-  (dicek 2026-10-14: 95.091 judul total, cuma 6.972 yang punya chapter
-  bahasa Indonesia). Posisinya asuransi, bukan katalog utama. Mode
-  browse di MangaDex dibatasi ke judul yang punya chapter Indonesia;
-  daftar chapter mengutamakan bahasa Indonesia, fallback ke bahasa
-  lain hanya kalau judul itu tidak punya chapter Indonesia sama sekali.
+Cover tidak lagi di-hotlink mentah dari CDN sumber (terukur
+0,6–1,4 dtk per gambar, thumbnail kecil tapi berat): URL cover
+ditulis ulang ke **wsrv.nl** (`w=472&output=webp` — resize +
+re-encode WebP di CDN beneran; contoh terukur: thumbnail PNG
+141–175 KB jadi WebP ~27 KB), dan URL origin asli disimpan sebagai
+`coverFallback` yang dipakai UI kalau URL pipeline gagal dimuat.
 
-Soal latency: payload JSON cuma 12–22 KB, jadi waktu load itu murni
-soal round trip dan TTFB origin — dikejar di empat tempat. (1) Urutan
-prioritas mengikuti kecepatan terukur 2026-10-14: instance KomikIndo
-menjawab ~0,35 detik, tunnel KomikCast ~1–1,7 detik (dengan spike
-kadang beberapa detik), jadi KomikIndo duluan walau katalognya sedikit
-lebih kecil. (2) Di build produksi, instance Sanka diakses lewat edge
-proxy Vercel (`api/proxy.ts`) yang meng-cache response di edge —
-`s-maxage` + `stale-while-revalidate` per jenis path (latest/search
-60 dtk, library 5 menit, detail 10 menit, chapter/genre 1 jam) — jadi
-load berulang kena edge cache (~puluhan ms) dan cache hangat tetap
-melayani selagi origin down; proxy yang error otomatis fallback ke
-akses langsung, lalu ke provider berikutnya. (3) Transport terakhir
-yang berhasil melayani diingat di localStorage dan dicoba duluan di
-kunjungan berikutnya. (4) Halaman list diakumulasi paralel (maks 3
-halaman per gelombang, ter-serialisasi per cursor supaya render home
-yang jalan bersamaan tidak menggandakan fetch), dan detail komik
-di-prefetch saat kartu disentuh/hover + saat idle untuk kartu trending
-yang terlihat — klik komik populer jadi seketika dari cache sesi.
-
-Kemampuan format Sanka (semua diverifikasi langsung ke instance live):
+Catatan format Sanka (semua diverifikasi langsung ke instance live):
 
 - Endpoint: `/latest/:page`, `/detail/:slug`, `/chapter/:slug`,
-  `/library`, `/genres`, `/search/:query/:page`.
-- **Filter genre & type beneran server-side** lewat `/library`
-  (`?genre=`, `?type=`) — beda dari Sansekai yang tidak punya filter
-  server sama sekali dan memaksa filter client-side dari pool popular.
-- **Daftar genre ditarik dari `/genres`** (digabung dari dua instance;
-  slug marker eksplisit `adult`/`mature` disaring dari chip) — bukan
-  hardcode lagi seperti era Sansekai.
-- **Paginasi beneran** (`hasNextPage`/`totalPages`), dan sejauh yang
-  terlihat tidak ada rate limit 5 request/menit seperti Sansekai.
-  Caching per sesi tetap dipertahankan (request identik di-share,
-  halaman yang sudah ditarik dipakai ulang lintas fitur) sebagai
-  kesopanan ke instance komunitas — bukan lagi syarat hidup app.
-- "Top trending" diambil dari field `komikPopuler` yang ikut di
-  response `/latest` (tidak ada endpoint popular tersendiri).
-- **Status di halaman detail itu asli** (teks Indonesia: "Berjalan",
-  "Tamat", dst.). Di daftar/list, status tetap heuristik dari tanggal
-  chapter terakhir (>180 hari = "Hiatus") karena payload list tidak
-  membawa status.
-- **Tanggal chapter berbentuk string relatif bahasa Indonesia**
-  ("3 hari lalu") — dikonversi ke timestamp absolut perkiraan di
-  client, karena UI me-render `publishAt` pakai `new Date(...)`.
-- **Gambar tidak butuh proxy** — URL gambar dari kedua instance bisa
-  diakses langsung dari `<img>`.
-- Slug dari instance KomikCast terlihat "dobel" untuk sebagian judul
-  (slug yang sama tersambung dua kali) — itu bentuk asli dari
-  sumbernya dan endpoint detail/chapter menerimanya apa adanya; slug
-  selalu dipakai verbatim, tidak dibersihkan/diubah di client.
+  `/library`, `/genres`, `/search/:query/:page`. Response dua
+  instance identik bentuknya, jadi satu client (dan satu generator)
+  melayani keduanya.
+- **Filter genre & type server-side** lewat `/library` (`?genre=`,
+  `?type=`), **daftar genre dari `/genres`**, **paginasi beneran**
+  (`hasNextPage`/`totalPages`), tanpa rate limit 5 request/menit
+  seperti Sansekai dulu. "Top trending" dari field `komikPopuler`
+  di response `/latest`.
+- **Status asli ada di halaman detail** (teks Indonesia: "Berjalan",
+  "Tamat"); di list status heuristik dari tanggal chapter terakhir
+  (>180 hari = "Hiatus"). **Tanggal chapter string relatif bahasa
+  Indonesia** ("3 hari lalu") dikonversi ke timestamp absolut
+  perkiraan karena UI me-render `publishAt` pakai `new Date(...)`.
+- Slug instance KomikCast terlihat "dobel" untuk sebagian judul —
+  bentuk asli dari sumbernya, diterima endpoint apa adanya; slug
+  selalu dipakai verbatim.
+- MangaDex sengaja terakhir di rantai live: API resminya praktis
+  tidak bisa mati, tapi katalog terjemahan Indonesianya tipis
+  (terverifikasi 2026-10-14: 95.091 judul, cuma 6.972 berchapter
+  Indonesia) — posisi asuransi, bukan katalog utama.
 
-Base URL tiap provider bisa dioverride lewat env var
+Base URL provider live bisa dioverride lewat env var
 (`VITE_SANKA_KOMIKCAST_BASE`, `VITE_SANKA_KOMIKINDO_BASE`,
-`VITE_MANGADEX_API_BASE`); default-nya URL publik di atas. Semua
-provider adalah layanan pihak ketiga, bukan bagian dari project ini —
-yang berubah dari era sebelumnya: sekarang tidak ada satu pun dari
-mereka yang bisa mematikan app ini sendirian.
-
-nse, sumber data ikut mati/rusak
-sampai ada perbaikan di kode ini — tidak ada fallback otomatis ke sumber
-lain.
+`VITE_MANGADEX_API_BASE`). URL snapshot adalah konstanta di
+`src/comicApi.ts` (`SNAPSHOT_BASE`, menunjuk branch `snapshot` repo
+ini). Semua sumber tetap layanan pihak ketiga — yang berubah:
+sekarang tidak ada satu pun dari mereka yang berada di jalur kritis
+halaman utama.
 
 ## Setup Firebase (login, komentar/review, trending hari ini)
 
@@ -228,7 +220,7 @@ supaya collection `ratings` ikut ke-cover.
   login kalau belum masuk), tapi datanya sendiri masih 100% lokal
   (localStorage per browser), begitu juga reading-progress — belum ada
   backend buat itu. Komentar/review sudah live lewat Firebase; data komik
-  sudah live lewat lapisan multi-provider (lihat "Sumber data" di atas).
+  sudah live lewat snapshot + lapisan provider (lihat "Sumber data" di atas).
 - Progress baca (`panpan-progress` di localStorage) dipakai buat mengisi
   section "Continue reading" di homepage dan bagian "Reading history" di
   halaman Library (dibatasi 20 entri terakhir).
@@ -256,12 +248,13 @@ supaya collection `ratings` ikut ke-cover.
   chapter terbaru itu kebetulan "Chapter 0" (prolog) — nomor chapter
   ke-tertukar sama jumlah chapter. Sudah diperbaiki, sekarang selalu pakai
   jumlah chapter yang sebenarnya.
-- Cover diambil langsung dari URL gambar yang dikasih provider (CDN
-  sumber masing-masing), diakses langsung tanpa proxy — beda dari Komiku
-  dulu yang butuh `/image-proxy` khusus + normalisasi parameter `resize`
-  supaya tidak burik di section tertentu.
-- Daftar genre (home & Explore) sekarang ditarik dari endpoint
-  `/genres` provider Sanka, digabung dari dua instance — lihat
+- Cover diambil dari URL yang dikasih provider tapi ditulis ulang
+  lewat wsrv.nl (resize + WebP) dengan URL origin sebagai fallback —
+  lihat "Sumber data". (Komiku dulu butuh `/image-proxy` khusus +
+  normalisasi parameter `resize` supaya tidak burik di section
+  tertentu; wsrv.nl menyelesaikan soal yang sama tanpa proxy sendiri.)
+- Daftar genre (home & Explore) sekarang datang dari snapshot
+  (`home.json`, asalnya endpoint `/genres` provider Sanka) — lihat
   "Sumber data" di atas. (Era Sansekai dulu hardcoded karena API-nya
   tidak punya endpoint genre sama sekali.)
 - Bottom navbar (Home/Explore/Library/Account) cuma muncul di layar sempit
