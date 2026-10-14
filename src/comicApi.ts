@@ -35,27 +35,25 @@ import type { ChapterEntry, Comic, ComicStatus, ComicType } from "./types";
 // 2026-10-14: 95,091 titles overall, only 6,972 with Indonesian
 // chapters). It's the insurance layer, not the main catalog.
 //
-// Latency design (measured 2026-10-14; payloads are tiny — 12–22 KB —
-// so load time is all round trips and origin TTFB, not bandwidth):
-//   - Priority follows measured speed: the KomikIndo instance answers
-//     in ~0.35 s where the KomikCast tunnel instance needs ~1–1.7 s
-//     (with occasional multi-second spikes), so KomikIndo goes first
-//     despite its slightly smaller catalog.
-//   - In production builds the Sanka instances are reached through
-//     the Vercel edge proxy (`api/proxy.ts`), which caches responses
-//     at the edge (s-maxage + stale-while-revalidate per path type).
-//     Repeat loads of warm paths are edge-cache hits (~tens of ms)
-//     instead of origin round trips, and a warm cache keeps serving
-//     (stale) while an origin is down. If the proxy transport fails,
-//     the same catalog is retried direct before failing over.
-//   - The last provider transport that served a discovery call is
-//     remembered in localStorage and tried first on the next visit.
-//   - List pages are accumulated in parallel batches (up to 3 pages
-//     per wave) instead of strictly one-by-one, and accumulation is
-//     serialized per cursor — the home screen fires several list
-//     renders concurrently against the same pool, and unsynchronized
-//     accumulators would fetch the same pages twice and interleave
-//     duplicates into the shared buffer.
+// Latency architecture (v3, after two measured failures — see the
+// README's "Sumber data" section for the post-mortem): the browser
+// should not depend on live calls to the community instances at all
+// for its hot surfaces. A scheduled GitHub Actions job
+// (scripts/snapshot.mjs) fetches the catalogs server-side every
+// ~30 minutes and publishes normalized JSON snapshots to this repo's
+// `snapshot` branch; discovery reads (home rails, genre list,
+// unfiltered and single-filter browsing) are served from those
+// snapshots first — static files behind raw.githubusercontent.com's
+// CDN plus the service worker's on-device cache — and only fall back
+// to the live provider chain below for what snapshots don't cover
+// (deep pagination, combined filters, search). Detail and chapter
+// reads stay live (long tail), routed to the owning catalog as
+// before. The live chain itself keeps the measured priority
+// (KomikIndo ~0.35 s TTFB before the KomikCast tunnel's ~1–1.7 s),
+// parallel serialized page accumulation, and a localStorage sticky
+// winner. Covers are rewritten through the wsrv.nl image pipeline
+// (resized WebP on a real CDN) with the origin URL kept as fallback —
+// origin image CDNs measured 0.6–1.4 s per cover.
 
 const SANKA_KOMIKCAST_BASE =
   (import.meta.env.VITE_SANKA_KOMIKCAST_BASE as string) || "https://komikcast.aoxi.my.id/comic/komikcast";
@@ -172,6 +170,21 @@ function mapSankaStatus(raw: string | undefined | null): ComicStatus {
   return "Ongoing";
 }
 
+// Cover images are the slowest payloads in the app (origin CDNs
+// measured at 0.6–1.4 s per image, shipping small but heavy
+// thumbnails). Route them through wsrv.nl — resized to a
+// card-appropriate width, re-encoded to WebP, served from a real CDN —
+// and keep the origin URL as `coverFallback` so the UI can swap back
+// if the pipeline ever fails on a given image.
+function coverUrls(origin: string | null | undefined): { cover: string | null; coverFallback?: string } {
+  if (!origin || !/^https?:\/\//.test(origin)) return { cover: origin || null };
+  const stripped = origin.replace(/^https:\/\//, "ssl:").replace(/^http:\/\//, "");
+  return {
+    cover: `https://images.weserv.nl/?url=${encodeURIComponent(stripped)}&w=472&output=webp`,
+    coverFallback: origin,
+  };
+}
+
 function slugify(name: string): string {
   return name
     .toLowerCase()
@@ -198,11 +211,11 @@ export interface Genre {
   slug: string;
 }
 
-// A provider is one TRANSPORT to one catalog. Two Sanka catalogs exist,
-// each reachable via the edge proxy (production default) or direct;
-// MangaDex has a single direct transport. Ids namespace by `catalog`,
-// health/cooldown/stickiness track by `healthKey`, so switching
-// transports never changes a comic's identity.
+// A provider is one access path to one catalog. Each Sanka catalog has
+// a single direct provider here (the v2 edge-proxy transport was
+// removed — it taxed every cold load and its 60s TTL meant the edge
+// cache almost never hit); MangaDex likewise. Ids namespace by
+// `catalog`; health/cooldown/stickiness track by `healthKey`.
 interface Provider {
   catalog: string;
   healthKey: string;
@@ -231,8 +244,7 @@ function applySort(comics: Comic[], q: ListQuery): Comic[] {
 }
 
 // ===========================================================================
-// Sanka-format provider (serves both the KomikCast and KomikIndo catalogs,
-// over either the edge-proxy or the direct transport)
+// Sanka-format provider (serves both the KomikCast and KomikIndo catalogs)
 // ===========================================================================
 
 interface SankaListItem {
@@ -272,7 +284,7 @@ function makeSankaProvider(catalog: string, healthKey: string, buildUrl: (path: 
       chapters: 0, // real count only exists on the detail page
       readers: "-",
       desc: "",
-      cover: raw.image || null,
+      ...coverUrls(raw.image),
     };
   }
 
@@ -458,7 +470,7 @@ function makeSankaProvider(catalog: string, healthKey: string, buildUrl: (path: 
       chapters: chapters.length,
       readers: formatCount(Number.isFinite(votes) ? votes : undefined),
       desc: (d.description || "").replace(/\s+/g, " ").trim(),
-      cover: d.image || null,
+      ...coverUrls(d.image),
     };
     return { comic, chapters };
   }
@@ -717,39 +729,18 @@ const mangadex: Provider = (() => {
 // Transports + facade — priority order, sticky winner, health failover
 // ===========================================================================
 
-// Production builds reach the Sanka instances through the Vercel edge
-// proxy (see api/proxy.ts) unless a base URL is explicitly overridden
-// via env; dev builds (no /api functions under plain `vite`) go direct.
-function sankaTransports(
-  catalog: string,
-  proxyKey: string,
-  directBase: string,
-  envOverridden: boolean,
-): Provider[] {
-  const transports: Provider[] = [];
-  if (import.meta.env.PROD && !envOverridden) {
-    transports.push(
-      makeSankaProvider(catalog, `proxy:${catalog}`, (path) => `/api/proxy?p=${proxyKey}&path=${encodeURIComponent(path)}`),
-    );
-  }
-  transports.push(makeSankaProvider(catalog, `direct:${catalog}`, (path) => `${directBase}${path}`));
-  return transports;
-}
-
+// One direct provider per Sanka catalog. (v2 also had an edge-proxy
+// transport per catalog, tried first in production; it was removed
+// because its cache almost never hit at a 60s TTL while every miss
+// cost more than going direct — see the README post-mortem.)
 // Priority = measured speed (see header): KomikIndo first, KomikCast
 // second, MangaDex last.
-const komikindoTransports = sankaTransports(
-  "sanka-komikindo",
-  "komikindo",
-  SANKA_KOMIKINDO_BASE,
-  Boolean(import.meta.env.VITE_SANKA_KOMIKINDO_BASE),
-);
-const komikcastTransports = sankaTransports(
-  "sanka-komikcast",
-  "komikcast",
-  SANKA_KOMIKCAST_BASE,
-  Boolean(import.meta.env.VITE_SANKA_KOMIKCAST_BASE),
-);
+const komikindoTransports: Provider[] = [
+  makeSankaProvider("sanka-komikindo", "direct:sanka-komikindo", (path) => `${SANKA_KOMIKINDO_BASE}${path}`),
+];
+const komikcastTransports: Provider[] = [
+  makeSankaProvider("sanka-komikcast", "direct:sanka-komikcast", (path) => `${SANKA_KOMIKCAST_BASE}${path}`),
+];
 const TRANSPORTS: Provider[] = [...komikindoTransports, ...komikcastTransports, mangadex];
 const CATALOG_TRANSPORTS = new Map<string, Provider[]>();
 for (const t of TRANSPORTS) {
@@ -819,15 +810,87 @@ async function discover<T>(fn: (p: Provider) => Promise<T>): Promise<T> {
     : new Error("All comic providers are unreachable right now — please try again in a moment.");
 }
 
+// ===========================================================================
+// Snapshot layer — published catalog JSON, read before any live call
+// (see the header comment and scripts/snapshot.mjs). A missing or
+// unreadable snapshot is not an error: the live chain below decides.
+// ===========================================================================
+
+const SNAPSHOT_BASE = "https://raw.githubusercontent.com/Lisztomaniaaa/komik/snapshot/data";
+
+interface SnapshotHome {
+  generatedAt: string;
+  trending: Comic[];
+  latest: Comic[];
+  genres: Genre[];
+}
+interface SnapshotItems {
+  generatedAt: string;
+  items: Comic[];
+}
+
+async function snapshotJson<T>(file: string): Promise<T | null> {
+  try {
+    return await getJson<T>(`${SNAPSHOT_BASE}/${file}`);
+  } catch {
+    return null;
+  }
+}
+
+let homeSnapshotPromise: Promise<SnapshotHome | null> | null = null;
+function homeSnapshot(): Promise<SnapshotHome | null> {
+  if (!homeSnapshotPromise) homeSnapshotPromise = snapshotJson<SnapshotHome>("home.json");
+  return homeSnapshotPromise;
+}
+
+// Serve a list window from snapshot items only when the whole window
+// sits inside the snapshot; a window reaching past its end goes live,
+// so deep pagination can't silently truncate at the snapshot's edge.
+function snapshotWindow(items: Comic[], q: ListQuery): { comics: Comic[]; total: number } | null {
+  if (q.offset + q.limit > items.length) return null;
+  return { comics: applySort(items.slice(q.offset, q.offset + q.limit), q), total: items.length };
+}
+
 export async function fetchList(q: ListQuery): Promise<{ comics: Comic[]; total: number }> {
+  // Snapshot first for the shapes it covers: unfiltered browsing reads
+  // the snapshot's latest pool (the same pool the live path serves),
+  // single-filter browsing reads the matching per-genre / per-type
+  // file. Search and combined genre+type filters are live-only.
+  if (!q.title) {
+    const genre = q.genre && q.genre !== "All" ? q.genre : null;
+    const type = q.type && q.type !== "All" ? q.type : null;
+    if (!genre && !type) {
+      const home = await homeSnapshot();
+      if (home) {
+        const win = snapshotWindow(home.latest, q);
+        if (win) return win;
+      }
+    } else if (genre && !type) {
+      const file = await snapshotJson<SnapshotItems>(`genre-${genre}.json`);
+      if (file) {
+        const win = snapshotWindow(file.items, q);
+        if (win) return win;
+      }
+    } else if (type && !genre) {
+      const file = await snapshotJson<SnapshotItems>(`type-${type.toLowerCase()}.json`);
+      if (file) {
+        const win = snapshotWindow(file.items, q);
+        if (win) return win;
+      }
+    }
+  }
   return discover((p) => p.list(q));
 }
 
 export async function fetchTrendingAllTime(): Promise<Comic[]> {
+  const home = await homeSnapshot();
+  if (home && home.trending.length > 0) return home.trending;
   return discover((p) => p.trending());
 }
 
 export async function fetchLatestPool(max: number): Promise<Comic[]> {
+  const home = await homeSnapshot();
+  if (home && home.latest.length > 0) return home.latest.slice(0, max);
   return discover((p) => p.latestPool(max));
 }
 
@@ -837,6 +900,8 @@ export async function quickSearch(title: string, limit = 8): Promise<Comic[]> {
 }
 
 export async function fetchGenres(): Promise<Genre[]> {
+  const home = await homeSnapshot();
+  if (home && home.genres.length > 0) return home.genres;
   // Union of both Sanka genre lists (their catalogs overlap but neither
   // is a superset), fetched in PARALLEL — one catalog's transports are
   // tried in order until one answers. MangaDex tags only if both Sanka
@@ -874,8 +939,7 @@ export async function fetchGenres(): Promise<Genre[]> {
 
 // Detail/chapter routing: the namespaced id names the owning CATALOG —
 // content is never fetched from a different catalog than the one that
-// listed it, but the catalog's own transports (edge proxy, then direct)
-// are tried in order. Unprefixed ids are pre-refactor bookmarks; guess
+// listed it. Unprefixed ids are pre-refactor bookmarks; guess
 // Sanka (KomikIndo first — it's the faster instance — then KomikCast)
 // since those catalogs use slugs.
 async function routeToCatalog<T>(catalog: string, fn: (p: Provider) => Promise<T>): Promise<T> {
