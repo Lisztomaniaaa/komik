@@ -1,7 +1,7 @@
 import { collection, doc, getDocs, getFirestore, setDoc } from "firebase/firestore";
 import { app } from "./firebase";
 
-// Sansekai does report its own aggregate user_rate per title (used for
+// The comic providers report their own aggregate rating per title (used for
 // Comic.rating, shown on cards/search results), but the "reader rating"
 // widget on a comic's page is a separate, first-party tap-to-rate feature —
 // deliberately separate from the text comment system. One doc per user per
