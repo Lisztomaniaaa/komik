@@ -11,6 +11,7 @@ index.html         markup halaman (semua view: home, explore, detail, reader, ac
 src/style.css       semua styling (dark theme)
 src/types.ts        tipe data (Comic, ChapterEntry, Filters, CommentRow, dll.)
 src/comicApi.ts       lapisan data multi-provider — client format Sanka (2 instance) + MangaDex, failover otomatis, mapping ke tipe Comic, caching per sesi
+api/proxy.ts          edge proxy + cache Vercel untuk instance Sanka (transport produksi default di comicApi.ts)
 src/firebase.ts       init Firebase app dari env var (dipakai bareng oleh auth.ts & comments.ts)
 src/auth.ts           login/signup/logout via Firebase Authentication (email & password)
 src/comments.ts       fetch/post komentar & review ke Firestore — lihat "Setup Firebase" di bawah
@@ -70,6 +71,25 @@ Cara kerjanya:
   browse di MangaDex dibatasi ke judul yang punya chapter Indonesia;
   daftar chapter mengutamakan bahasa Indonesia, fallback ke bahasa
   lain hanya kalau judul itu tidak punya chapter Indonesia sama sekali.
+
+Soal latency: payload JSON cuma 12–22 KB, jadi waktu load itu murni
+soal round trip dan TTFB origin — dikejar di empat tempat. (1) Urutan
+prioritas mengikuti kecepatan terukur 2026-10-14: instance KomikIndo
+menjawab ~0,35 detik, tunnel KomikCast ~1–1,7 detik (dengan spike
+kadang beberapa detik), jadi KomikIndo duluan walau katalognya sedikit
+lebih kecil. (2) Di build produksi, instance Sanka diakses lewat edge
+proxy Vercel (`api/proxy.ts`) yang meng-cache response di edge —
+`s-maxage` + `stale-while-revalidate` per jenis path (latest/search
+60 dtk, library 5 menit, detail 10 menit, chapter/genre 1 jam) — jadi
+load berulang kena edge cache (~puluhan ms) dan cache hangat tetap
+melayani selagi origin down; proxy yang error otomatis fallback ke
+akses langsung, lalu ke provider berikutnya. (3) Transport terakhir
+yang berhasil melayani diingat di localStorage dan dicoba duluan di
+kunjungan berikutnya. (4) Halaman list diakumulasi paralel (maks 3
+halaman per gelombang, ter-serialisasi per cursor supaya render home
+yang jalan bersamaan tidak menggandakan fetch), dan detail komik
+di-prefetch saat kartu disentuh/hover + saat idle untuk kartu trending
+yang terlihat — klik komik populer jadi seketika dari cache sesi.
 
 Kemampuan format Sanka (semua diverifikasi langsung ke instance live):
 
