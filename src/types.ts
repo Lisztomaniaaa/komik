@@ -12,6 +12,10 @@ export interface Comic {
   readers: string;
   desc: string;
   cover: string | null;
+  // Untouched origin cover URL when `cover` was rewritten through the
+  // wsrv.nl image pipeline (see comicApi.ts) — the UI swaps to it if
+  // the pipeline URL ever fails to load.
+  coverFallback?: string;
 }
 
 export interface ChapterEntry {

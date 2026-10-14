@@ -127,11 +127,19 @@ async function comicBy(id: string): Promise<Comic> {
   return (await comicWithChapters(id)).comic;
 }
 
+// If a cover's wsrv.nl pipeline URL ever fails to load, swap once to
+// the untouched origin URL the data layer kept alongside it.
+function coverFallbackAttrs(c: Comic): string {
+  return c.coverFallback
+    ? ` data-fb="${c.coverFallback}" onerror="this.onerror=null;this.src=this.dataset.fb"`
+    : "";
+}
+
 function cardHtml(c: Comic, rank?: number): string {
   const cover = c.cover
-    ? `<img src="${c.cover}" alt="" loading="lazy">`
+    ? `<img src="${c.cover}" alt="" loading="lazy"${coverFallbackAttrs(c)}>`
     : `<div class="coverText">${c.title.replaceAll(" ", "<br>")}</div>`;
-  return `<div class="card" onclick="openComic('${c.id}')" onpointerdown="prefetchComic('${c.id}')" onmouseenter="prefetchComic('${c.id}')"><div class="cover">${rank ? `<span class="rank">#${rank}</span>` : `<span class="rank">${c.type}</span>`}${cover}</div><div class="title">${c.title}</div><div class="meta">${c.type} · ${c.status} · <span class="star">★ ${c.rating}</span></div></div>`;
+  return `<div class="card" onclick="openComic('${c.id}')" onmouseenter="prefetchComic('${c.id}')"><div class="cover">${rank ? `<span class="rank">#${rank}</span>` : `<span class="rank">${c.type}</span>`}${cover}</div><div class="title">${c.title}</div><div class="meta">${c.type} · ${c.status} · <span class="star">★ ${c.rating}</span></div></div>`;
 }
 
 async function renderSearchResults(): Promise<void> {
@@ -147,7 +155,7 @@ async function renderSearchResults(): Promise<void> {
     list
       .map(
         (c) =>
-          `<div class="searchResult" onclick="openComic('${c.id}');hideSearchResults()" onpointerdown="prefetchComic('${c.id}')" onmouseenter="prefetchComic('${c.id}')"><div class="miniCover">${c.cover ? `<img src="${c.cover}" alt="">` : ""}</div><div><strong>${c.title}</strong><small>${c.type} · ${c.status} · ★ ${c.rating}</small></div></div>`,
+          `<div class="searchResult" onclick="openComic('${c.id}');hideSearchResults()" onmouseenter="prefetchComic('${c.id}')"><div class="miniCover">${c.cover ? `<img src="${c.cover}" alt=""${coverFallbackAttrs(c)}>` : ""}</div><div><strong>${c.title}</strong><small>${c.type} · ${c.status} · ★ ${c.rating}</small></div></div>`,
       )
       .join("") || '<div class="searchEmpty">No comics found.</div>';
   box.style.display = "block";
@@ -348,7 +356,17 @@ async function renderTrending(): Promise<void> {
     // Warm the detail cache for the visible trending cards while the
     // user is still deciding what to tap — opening one is then
     // instant instead of a fresh origin round trip (see prefetchComic).
-    const warm = () => pool.slice(start, start + PAGE_SIZE).forEach((c) => prefetchComic(c.id));
+    const conn = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } })
+      .connection;
+    const warm = () => {
+      // Prefetch is a luxury: skip it entirely on data-saver / slow
+      // links, where warm-up requests would fight the user's real taps
+      // for the connection pool. (Pointer-down prefetch was removed
+      // for the same reason — on touch screens, starting a scroll IS
+      // a pointer-down, so it fired a detail storm on every flick.)
+      if (conn?.saveData || conn?.effectiveType === "2g" || conn?.effectiveType === "slow-2g") return;
+      pool.slice(start, start + 4).forEach((c) => prefetchComic(c.id));
+    };
     if ("requestIdleCallback" in window) requestIdleCallback(warm, { timeout: 2000 });
     else setTimeout(warm, 600);
   } catch {
@@ -451,7 +469,7 @@ async function renderContinueReading(): Promise<void> {
   const [mangaId] = entries[0][0].split("::");
   try {
     const c = await comicBy(mangaId);
-    box.innerHTML = `<div class="row" style="cursor:pointer" onclick="openComic('${c.id}')"><div class="thumb">${c.cover ? `<img src="${c.cover}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:7px">` : ""}</div><div><strong>${c.title}</strong><small>${Math.round(entries[0][1].percent)}% progress</small></div><span class="new">CONTINUE</span></div>`;
+    box.innerHTML = `<div class="row" style="cursor:pointer" onclick="openComic('${c.id}')"><div class="thumb">${c.cover ? `<img src="${c.cover}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:7px"${coverFallbackAttrs(c)}>` : ""}</div><div><strong>${c.title}</strong><small>${Math.round(entries[0][1].percent)}% progress</small></div><span class="new">CONTINUE</span></div>`;
   } catch {
     box.innerHTML = '<div class="empty">You have not started reading anything yet.</div>';
   }
