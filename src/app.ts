@@ -7,6 +7,7 @@ import {
   fetchLatestPool,
   fetchList,
   fetchTrendingAllTime,
+  prefetchComic,
   quickSearch,
 } from "./comicApi";
 import type {
@@ -130,7 +131,7 @@ function cardHtml(c: Comic, rank?: number): string {
   const cover = c.cover
     ? `<img src="${c.cover}" alt="" loading="lazy">`
     : `<div class="coverText">${c.title.replaceAll(" ", "<br>")}</div>`;
-  return `<div class="card" onclick="openComic('${c.id}')"><div class="cover">${rank ? `<span class="rank">#${rank}</span>` : `<span class="rank">${c.type}</span>`}${cover}</div><div class="title">${c.title}</div><div class="meta">${c.type} · ${c.status} · <span class="star">★ ${c.rating}</span></div></div>`;
+  return `<div class="card" onclick="openComic('${c.id}')" onpointerdown="prefetchComic('${c.id}')" onmouseenter="prefetchComic('${c.id}')"><div class="cover">${rank ? `<span class="rank">#${rank}</span>` : `<span class="rank">${c.type}</span>`}${cover}</div><div class="title">${c.title}</div><div class="meta">${c.type} · ${c.status} · <span class="star">★ ${c.rating}</span></div></div>`;
 }
 
 async function renderSearchResults(): Promise<void> {
@@ -146,7 +147,7 @@ async function renderSearchResults(): Promise<void> {
     list
       .map(
         (c) =>
-          `<div class="searchResult" onclick="openComic('${c.id}');hideSearchResults()"><div class="miniCover">${c.cover ? `<img src="${c.cover}" alt="">` : ""}</div><div><strong>${c.title}</strong><small>${c.type} · ${c.status} · ★ ${c.rating}</small></div></div>`,
+          `<div class="searchResult" onclick="openComic('${c.id}');hideSearchResults()" onpointerdown="prefetchComic('${c.id}')" onmouseenter="prefetchComic('${c.id}')"><div class="miniCover">${c.cover ? `<img src="${c.cover}" alt="">` : ""}</div><div><strong>${c.title}</strong><small>${c.type} · ${c.status} · ★ ${c.rating}</small></div></div>`,
       )
       .join("") || '<div class="searchEmpty">No comics found.</div>';
   box.style.display = "block";
@@ -344,6 +345,12 @@ async function renderTrending(): Promise<void> {
         .map((c, i) => cardHtml(c, start + i + 1))
         .join("") || '<div class="empty" style="grid-column:1/-1">No comics right now.</div>';
     renderPagination("trendingPagination", trendingAllTimePage, pages, "setTrendingPage", pool.length);
+    // Warm the detail cache for the visible trending cards while the
+    // user is still deciding what to tap — opening one is then
+    // instant instead of a fresh origin round trip (see prefetchComic).
+    const warm = () => pool.slice(start, start + PAGE_SIZE).forEach((c) => prefetchComic(c.id));
+    if ("requestIdleCallback" in window) requestIdleCallback(warm, { timeout: 2000 });
+    else setTimeout(warm, 600);
   } catch {
     grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Failed to load trending comics.</div>';
   }
@@ -1136,5 +1143,6 @@ Object.assign(window, {
   setLatestType,
   hideSearchResults,
   openCurrentReader,
+  prefetchComic,
   rateComic,
 });
