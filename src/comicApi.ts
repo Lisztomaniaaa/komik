@@ -8,30 +8,54 @@ import type { ChapterEntry, Comic, ComicStatus, ComicType } from "./types";
 // this project (Komikcast scraper, a self-hosted Komiku fork, then
 // Sansekai). The fix here is structural, not another provider swap:
 //
-//   1. "sanka-komikcast" — KomikCast catalog in the Sanka JSON format
+//   catalog "sanka-komikindo" — KomikIndo catalog in the Sanka JSON
+//      format (https://www.sankavollerei.web.id/comic/komikindo)
+//   catalog "sanka-komikcast" — KomikCast catalog, same Sanka format
 //      (https://komikcast.aoxi.my.id/comic/komikcast)
-//   2. "sanka-komikindo" — KomikIndo catalog, same Sanka format
-//      (https://www.sankavollerei.web.id/comic/komikindo)
-//   3. "mangadex" — the official MangaDex API (https://api.mangadex.org)
+//   catalog "mangadex" — the official MangaDex API
+//      (https://api.mangadex.org)
 //
 // The two Sanka instances speak an IDENTICAL response format, so a
 // single client serves both and discovery calls (list / search /
 // trending / latest / genres) fail over between providers in priority
-// order: a provider that errors is marked down for a cooldown period
-// and skipped, so one dead source degrades the app instead of killing
-// it. Detail and chapter calls do NOT fail over across providers — a
-// comic's content lives on the provider it was discovered on, which is
-// why every Comic.id / ChapterEntry.id is namespaced by provider
-// ("sanka-komikcast:<slug>", "mangadex:<uuid>") and routed back to its
-// owner. (This also namespaces the Firestore keys that hang off comic
-// ids — comments, ratings, view counts.) Unprefixed ids are legacy
-// bookmarks from the Sansekai era; they are guessed as Sanka slugs.
+// order: a provider transport that errors is marked down for a
+// cooldown period and skipped, so one dead source degrades the app
+// instead of killing it. Detail and chapter calls do NOT fail over
+// across catalogs — a comic's content lives on the catalog it was
+// discovered on, which is why every Comic.id / ChapterEntry.id is
+// namespaced by catalog ("sanka-komikindo:<slug>", "mangadex:<uuid>")
+// and routed back to its owner. (This also namespaces the Firestore
+// keys that hang off comic ids — comments, ratings, view counts.)
+// Unprefixed ids are legacy bookmarks from the Sansekai era; they are
+// guessed as Sanka slugs.
 //
 // MangaDex is last on purpose: its API is the only one here that can
 // never really die (official, free), but its Indonesian-translated
 // catalog is much thinner than the Indo aggregator catalogs (verified
 // 2026-10-14: 95,091 titles overall, only 6,972 with Indonesian
 // chapters). It's the insurance layer, not the main catalog.
+//
+// Latency design (measured 2026-10-14; payloads are tiny — 12–22 KB —
+// so load time is all round trips and origin TTFB, not bandwidth):
+//   - Priority follows measured speed: the KomikIndo instance answers
+//     in ~0.35 s where the KomikCast tunnel instance needs ~1–1.7 s
+//     (with occasional multi-second spikes), so KomikIndo goes first
+//     despite its slightly smaller catalog.
+//   - In production builds the Sanka instances are reached through
+//     the Vercel edge proxy (`api/proxy.ts`), which caches responses
+//     at the edge (s-maxage + stale-while-revalidate per path type).
+//     Repeat loads of warm paths are edge-cache hits (~tens of ms)
+//     instead of origin round trips, and a warm cache keeps serving
+//     (stale) while an origin is down. If the proxy transport fails,
+//     the same catalog is retried direct before failing over.
+//   - The last provider transport that served a discovery call is
+//     remembered in localStorage and tried first on the next visit.
+//   - List pages are accumulated in parallel batches (up to 3 pages
+//     per wave) instead of strictly one-by-one, and accumulation is
+//     serialized per cursor — the home screen fires several list
+//     renders concurrently against the same pool, and unsynchronized
+//     accumulators would fetch the same pages twice and interleave
+//     duplicates into the shared buffer.
 
 const SANKA_KOMIKCAST_BASE =
   (import.meta.env.VITE_SANKA_KOMIKCAST_BASE as string) || "https://komikcast.aoxi.my.id/comic/komikcast";
@@ -174,8 +198,14 @@ export interface Genre {
   slug: string;
 }
 
+// A provider is one TRANSPORT to one catalog. Two Sanka catalogs exist,
+// each reachable via the edge proxy (production default) or direct;
+// MangaDex has a single direct transport. Ids namespace by `catalog`,
+// health/cooldown/stickiness track by `healthKey`, so switching
+// transports never changes a comic's identity.
 interface Provider {
-  name: string;
+  catalog: string;
+  healthKey: string;
   list(q: ListQuery): Promise<{ comics: Comic[]; total: number }>;
   trending(): Promise<Comic[]>;
   latestPool(max: number): Promise<Comic[]>;
@@ -185,13 +215,13 @@ interface Provider {
   chapterPages(rawComicId: string, rawChapterId: string): Promise<string[]>;
 }
 
-function ns(providerName: string, rawId: string): string {
-  return `${providerName}:${rawId}`;
+function ns(catalog: string, rawId: string): string {
+  return `${catalog}:${rawId}`;
 }
-function splitNs(id: string): { provider: string; raw: string } | null {
+function splitNs(id: string): { catalog: string; raw: string } | null {
   const i = id.indexOf(":");
   if (i <= 0) return null;
-  return { provider: id.slice(0, i), raw: id.slice(i + 1) };
+  return { catalog: id.slice(0, i), raw: id.slice(i + 1) };
 }
 
 function applySort(comics: Comic[], q: ListQuery): Comic[] {
@@ -201,7 +231,8 @@ function applySort(comics: Comic[], q: ListQuery): Comic[] {
 }
 
 // ===========================================================================
-// Sanka-format provider (serves both the KomikCast and KomikIndo instances)
+// Sanka-format provider (serves both the KomikCast and KomikIndo catalogs,
+// over either the edge-proxy or the direct transport)
 // ===========================================================================
 
 interface SankaListItem {
@@ -220,17 +251,17 @@ interface SankaListResponse {
   komikPopuler?: (SankaListItem & { rating?: string | number; author?: string })[];
 }
 
-function makeSankaProvider(name: string, base: string): Provider {
+function makeSankaProvider(catalog: string, healthKey: string, buildUrl: (path: string) => string): Provider {
   async function sankaGet<T>(path: string): Promise<T> {
-    const json = await getJson<T & { success?: boolean }>(`${base}${path}`);
-    if (json && json.success === false) throw new Error(`${name} returned success=false: ${path}`);
+    const json = await getJson<T & { success?: boolean }>(buildUrl(path));
+    if (json && json.success === false) throw new Error(`${catalog} returned success=false: ${path}`);
     return json;
   }
 
   function mapListItem(raw: SankaListItem): Comic {
     const latestChapterDate = raw.chapters?.[0]?.date;
     return {
-      id: ns(name, raw.slug),
+      id: ns(catalog, raw.slug),
       title: cleanTitle(raw.title),
       type: mapType(raw.type),
       // List payloads carry no per-title genre data (detail pages do) —
@@ -244,22 +275,6 @@ function makeSankaProvider(name: string, base: string): Provider {
       cover: raw.image || null,
     };
   }
-
-  // Accumulating pool pager, same pattern the old client used against
-  // Sansekai's paginated /komik/popular: pages are fetched on demand,
-  // session-cached by URL (see getJson), and shared across every
-  // fetchList call with the same key; a fresh offset-0 call resets the
-  // cursor because it means the filters changed. Unlike Sansekai there
-  // is no 5-requests/minute budget to protect, but the cap stays as
-  // basic politeness toward a community-run instance.
-  const MAX_NEW_PAGES_PER_CALL = 6;
-  interface Cursor {
-    buffer: Comic[];
-    nextPage: number;
-    exhausted: boolean;
-    seenPages: Set<number>;
-  }
-  const cursors = new Map<string, Cursor>();
 
   type ListMode =
     | { kind: "search"; query: string }
@@ -277,31 +292,78 @@ function makeSankaProvider(name: string, base: string): Provider {
     return `/latest/${page}`;
   }
 
-  async function accumulate(
+  async function fetchPage(mode: ListMode, page: number): Promise<{ items: Comic[]; hasNext: boolean }> {
+    const res = await sankaGet<SankaListResponse>(pagePath(mode, page));
+    const items = (res.komikList || []).map(mapListItem);
+    const hasNext =
+      (res.pagination?.hasNextPage ?? page < (res.pagination?.totalPages ?? page)) && items.length > 0;
+    return { items, hasNext };
+  }
+
+  // Accumulating pool pager, same pattern the old client used against
+  // Sansekai's paginated /komik/popular: pages are fetched on demand,
+  // session-cached by URL (see getJson), and shared across every
+  // fetchList call with the same key; a fresh offset-0 call resets the
+  // cursor because it means the filters changed. Two hardening changes
+  // vs the old version: calls against one cursor are SERIALIZED through
+  // a promise chain (the home screen starts Explore, Latest and genre
+  // rails concurrently against this same pool — unsynchronized, they'd
+  // fetch the same pages and push duplicate items into the buffer),
+  // and each wave fetches up to 3 pages IN PARALLEL (pages carry ~10
+  // items; one wave usually satisfies a 10-item view in a single
+  // round trip instead of two or three sequential ones).
+  interface Cursor {
+    buffer: Comic[];
+    nextPage: number;
+    exhausted: boolean;
+    chain: Promise<unknown>;
+  }
+  const cursors = new Map<string, Cursor>();
+
+  async function accumulateInner(cursor: Cursor, mode: ListMode, need: number): Promise<void> {
+    while (cursor.buffer.length < need && !cursor.exhausted) {
+      const remaining = need - cursor.buffer.length;
+      const batchSize = Math.max(1, Math.min(3, Math.ceil(remaining / 10)));
+      const pages = Array.from({ length: batchSize }, (_, i) => cursor.nextPage + i);
+      const settled = await Promise.allSettled(pages.map((p) => fetchPage(mode, p)));
+      let consumed = 0;
+      for (const s of settled) {
+        if (s.status === "rejected") {
+          // The batch's first page failing means the provider itself
+          // is in trouble — surface it so the facade can fail over. A
+          // later page failing just means the pool ran dry mid-batch.
+          if (consumed === 0) throw s.reason;
+          cursor.exhausted = true;
+          break;
+        }
+        cursor.buffer.push(...s.value.items);
+        consumed += 1;
+        if (!s.value.hasNext) {
+          cursor.exhausted = true;
+          break;
+        }
+      }
+      cursor.nextPage += consumed;
+      if (consumed === 0) break;
+    }
+  }
+
+  function accumulate(
     key: string,
     mode: ListMode,
     need: number,
   ): Promise<{ buffer: Comic[]; exhausted: boolean }> {
     let cursor = cursors.get(key);
     if (!cursor) {
-      cursor = { buffer: [], nextPage: 1, exhausted: false, seenPages: new Set() };
+      cursor = { buffer: [], nextPage: 1, exhausted: false, chain: Promise.resolve() };
       cursors.set(key, cursor);
     }
-    let newFetches = 0;
-    while (cursor.buffer.length < need && !cursor.exhausted && newFetches < MAX_NEW_PAGES_PER_CALL) {
-      const page = cursor.nextPage;
-      const isNew = !cursor.seenPages.has(page);
-      const res = await sankaGet<SankaListResponse>(pagePath(mode, page));
-      const items = (res.komikList || []).map(mapListItem);
-      cursor.buffer.push(...items);
-      cursor.seenPages.add(page);
-      cursor.nextPage = page + 1;
-      const hasNext =
-        res.pagination?.hasNextPage ?? (items.length > 0 && page < (res.pagination?.totalPages ?? page));
-      if (!hasNext || items.length === 0) cursor.exhausted = true;
-      if (isNew) newFetches += 1;
-    }
-    return { buffer: cursor.buffer, exhausted: cursor.exhausted };
+    const run = cursor.chain.then(() => accumulateInner(cursor, mode, need));
+    cursor.chain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run.then(() => ({ buffer: cursor.buffer, exhausted: cursor.exhausted }));
   }
 
   async function list(q: ListQuery): Promise<{ comics: Comic[]; total: number }> {
@@ -319,7 +381,7 @@ function makeSankaProvider(name: string, base: string): Provider {
       : genre || type
         ? { kind: "library", genre, type }
         : { kind: "latest" };
-    const key = `${name}:${mode.kind}:${q.title ?? ""}:${genre ?? ""}:${type ?? ""}`;
+    const key = `${catalog}:${mode.kind}:${q.title ?? ""}:${genre ?? ""}:${type ?? ""}`;
     if (q.offset === 0) cursors.delete(key);
     const { buffer, exhausted } = await accumulate(key, mode, q.offset + q.limit);
     let slice = buffer.slice(q.offset, q.offset + q.limit);
@@ -340,7 +402,7 @@ function makeSankaProvider(name: string, base: string): Provider {
   }
 
   async function latestPool(max: number): Promise<Comic[]> {
-    const { buffer } = await accumulate(`${name}:pool:latest`, { kind: "latest" }, max);
+    const { buffer } = await accumulate(`${catalog}:pool:latest`, { kind: "latest" }, max);
     return buffer.slice(0, max);
   }
 
@@ -375,7 +437,7 @@ function makeSankaProvider(name: string, base: string): Provider {
     const d = res.data;
     const chapters: ChapterEntry[] = (d.chapters || [])
       .map((ch) => ({
-        id: ns(name, ch.slug),
+        id: ns(catalog, ch.slug),
         label: cleanTitle(ch.title) || "Chapter",
         chapterNumber: parseChapterNumber(ch.title) ?? parseChapterNumber(ch.slug),
         publishAt: relativeIdToIso(ch.releaseTime),
@@ -387,7 +449,7 @@ function makeSankaProvider(name: string, base: string): Provider {
       // The id stays the slug the list/search handed out (that's what
       // the UI and Firestore keys are built from), not the numeric
       // source id inside the detail payload.
-      id: ns(name, rawSlug),
+      id: ns(catalog, rawSlug),
       title: cleanTitle(d.title),
       type: mapType(d.detail?.type),
       genres: (d.genres || []).map((g) => g.name),
@@ -412,7 +474,7 @@ function makeSankaProvider(name: string, base: string): Provider {
       .filter(Boolean);
   }
 
-  return { name, list, trending, latestPool, quickSearch, genres, comicWithChapters, chapterPages };
+  return { catalog, healthKey, list, trending, latestPool, quickSearch, genres, comicWithChapters, chapterPages };
 }
 
 // ===========================================================================
@@ -440,7 +502,8 @@ interface MdStatsResponse {
 }
 
 const mangadex: Provider = (() => {
-  const name = "mangadex";
+  const catalog = "mangadex";
+  const healthKey = "direct:mangadex";
   // Everything except `pornographic` — mirrors the old source's
   // catalog breadth (the genre chips exclude explicit markers anyway).
   const RATING_PARAMS = "contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica";
@@ -470,7 +533,7 @@ const mangadex: Provider = (() => {
     };
     const lastChapter = parseFloat(a.lastChapter || "");
     return {
-      id: ns(name, m.id),
+      id: ns(catalog, m.id),
       title,
       type: typeOf(m),
       genres: (a.tags || [])
@@ -528,24 +591,24 @@ const mangadex: Provider = (() => {
       const lang = q.type === "Manhwa" || q.type === "Webtoon" ? "ko" : q.type === "Manhua" ? "zh" : "ja";
       params.append("originalLanguage[]", lang);
     }
+    // Resolve the genre tag BEFORE the (single) list request — asking
+    // for a page first and re-querying with the tag afterwards (the
+    // previous version) doubled the round trips on the fallback path.
+    let genreResolved = false;
+    if (q.genre && q.genre !== "All") {
+      const tagId = await resolveTagId(q.genre);
+      if (tagId) {
+        params.append("includedTags[]", tagId);
+        params.set("includedTagsMode", "AND");
+        genreResolved = true;
+      }
+    }
     const res = await getJson<MdListResponse>(
       `${MANGADEX_BASE}/manga?${params.toString()}&${RATING_PARAMS}&${orderParam(q.sort)}`,
     );
     let comics = await withStats(res.data || []);
-    if (q.genre && q.genre !== "All") {
-      const tagId = await resolveTagId(q.genre);
-      if (tagId) {
-        // Re-query with the tag rather than filtering this page
-        // client-side (which would return nearly-empty pages).
-        const tagged = new URLSearchParams(params);
-        tagged.append("includedTags[]", tagId);
-        tagged.set("includedTagsMode", "AND");
-        const res2 = await getJson<MdListResponse>(
-          `${MANGADEX_BASE}/manga?${tagged.toString()}&${RATING_PARAMS}&${orderParam(q.sort)}`,
-        );
-        comics = await withStats(res2.data || []);
-        return { comics, total: res2.total ?? comics.length };
-      }
+    if (q.genre && q.genre !== "All" && !genreResolved) {
+      // Unknown genre slug — best effort: filter this page by name.
       comics = comics.filter((c) => c.genres.some((g) => slugify(g) === q.genre));
     }
     return { comics, total: res.total ?? comics.length };
@@ -628,7 +691,7 @@ const mangadex: Provider = (() => {
       .map((ch) => {
         const num = ch.attributes.chapter ? parseFloat(ch.attributes.chapter) : null;
         return {
-          id: ns(name, ch.id),
+          id: ns(catalog, ch.id),
           label: num !== null && Number.isFinite(num) ? `Chapter ${num}` : ch.attributes.title || "Oneshot",
           chapterNumber: num !== null && Number.isFinite(num) ? num : null,
           publishAt: ch.attributes.publishAt,
@@ -647,37 +710,104 @@ const mangadex: Provider = (() => {
     return (res.chapter?.data || []).map((f) => `${res.baseUrl}/data/${res.chapter.hash}/${f}`);
   }
 
-  return { name, list, trending, latestPool, quickSearch, genres, comicWithChapters, chapterPages };
+  return { catalog, healthKey, list, trending, latestPool, quickSearch, genres, comicWithChapters, chapterPages };
 })();
 
 // ===========================================================================
-// Facade — priority order + health-based failover (discovery calls only)
+// Transports + facade — priority order, sticky winner, health failover
 // ===========================================================================
 
-const sankaKomikcast = makeSankaProvider("sanka-komikcast", SANKA_KOMIKCAST_BASE);
-const sankaKomikindo = makeSankaProvider("sanka-komikindo", SANKA_KOMIKINDO_BASE);
-const PROVIDERS: Provider[] = [sankaKomikcast, sankaKomikindo, mangadex];
-const PROVIDER_BY_NAME = new Map(PROVIDERS.map((p) => [p.name, p]));
+// Production builds reach the Sanka instances through the Vercel edge
+// proxy (see api/proxy.ts) unless a base URL is explicitly overridden
+// via env; dev builds (no /api functions under plain `vite`) go direct.
+function sankaTransports(
+  catalog: string,
+  proxyKey: string,
+  directBase: string,
+  envOverridden: boolean,
+): Provider[] {
+  const transports: Provider[] = [];
+  if (import.meta.env.PROD && !envOverridden) {
+    transports.push(
+      makeSankaProvider(catalog, `proxy:${catalog}`, (path) => `/api/proxy?p=${proxyKey}&path=${encodeURIComponent(path)}`),
+    );
+  }
+  transports.push(makeSankaProvider(catalog, `direct:${catalog}`, (path) => `${directBase}${path}`));
+  return transports;
+}
+
+// Priority = measured speed (see header): KomikIndo first, KomikCast
+// second, MangaDex last.
+const komikindoTransports = sankaTransports(
+  "sanka-komikindo",
+  "komikindo",
+  SANKA_KOMIKINDO_BASE,
+  Boolean(import.meta.env.VITE_SANKA_KOMIKINDO_BASE),
+);
+const komikcastTransports = sankaTransports(
+  "sanka-komikcast",
+  "komikcast",
+  SANKA_KOMIKCAST_BASE,
+  Boolean(import.meta.env.VITE_SANKA_KOMIKCAST_BASE),
+);
+const TRANSPORTS: Provider[] = [...komikindoTransports, ...komikcastTransports, mangadex];
+const CATALOG_TRANSPORTS = new Map<string, Provider[]>();
+for (const t of TRANSPORTS) {
+  const arr = CATALOG_TRANSPORTS.get(t.catalog) || [];
+  arr.push(t);
+  CATALOG_TRANSPORTS.set(t.catalog, arr);
+}
 
 const DOWN_COOLDOWN_MS = 60_000;
 const downUntil = new Map<string, number>();
 function isDown(p: Provider): boolean {
-  return (downUntil.get(p.name) ?? 0) > Date.now();
+  return (downUntil.get(p.healthKey) ?? 0) > Date.now();
 }
 function markDown(p: Provider): void {
-  downUntil.set(p.name, Date.now() + DOWN_COOLDOWN_MS);
+  downUntil.set(p.healthKey, Date.now() + DOWN_COOLDOWN_MS);
+}
+
+// The last transport that served a discovery call is tried first next
+// visit — provider speeds here are community-instance weather, so the
+// ranking that was true last session is the best prior for this one.
+const STICKY_KEY = "komikvibe:provider";
+function readSticky(): string | null {
+  try {
+    return localStorage.getItem(STICKY_KEY);
+  } catch {
+    return null;
+  }
+}
+function writeSticky(healthKey: string): void {
+  try {
+    localStorage.setItem(STICKY_KEY, healthKey);
+  } catch {
+    // Private mode / storage disabled — stickiness is an optimization.
+  }
+}
+function orderedTransports(): Provider[] {
+  const sticky = readSticky();
+  if (!sticky) return TRANSPORTS;
+  const idx = TRANSPORTS.findIndex((p) => p.healthKey === sticky);
+  if (idx <= 0) return TRANSPORTS;
+  const list = [...TRANSPORTS];
+  const [winner] = list.splice(idx, 1);
+  list.unshift(winner);
+  return list;
 }
 
 async function discover<T>(fn: (p: Provider) => Promise<T>): Promise<T> {
   let lastError: unknown = null;
-  // Healthy providers first, in priority order; if every provider is in
-  // cooldown, fall through and try them all anyway (a stale "down" mark
-  // must never be the reason the app shows nothing).
+  // Healthy transports first, in priority order; if every transport is
+  // in cooldown, fall through and try them all anyway (a stale "down"
+  // mark must never be the reason the app shows nothing).
   for (const pass of [false, true]) {
-    for (const p of PROVIDERS) {
+    for (const p of orderedTransports()) {
       if (isDown(p) !== pass) continue;
       try {
-        return await fn(p);
+        const result = await fn(p);
+        writeSticky(p.healthKey);
+        return result;
       } catch (err) {
         markDown(p);
         lastError = err;
@@ -708,43 +838,71 @@ export async function quickSearch(title: string, limit = 8): Promise<Comic[]> {
 
 export async function fetchGenres(): Promise<Genre[]> {
   // Union of both Sanka genre lists (their catalogs overlap but neither
-  // is a superset); MangaDex tags only if both Sanka instances are down.
-  const merged = new Map<string, Genre>();
-  let anySanka = false;
-  for (const p of [sankaKomikcast, sankaKomikindo]) {
-    try {
-      for (const g of await p.genres()) {
-        const prev = merged.get(g.slug);
-        // Prefer the properly-capitalized display name when instances
-        // disagree ("Apocalypse" over "apocalypse").
-        if (!prev || (prev.title === prev.title.toLowerCase() && g.title !== g.title.toLowerCase())) {
-          merged.set(g.slug, g);
+  // is a superset), fetched in PARALLEL — one catalog's transports are
+  // tried in order until one answers. MangaDex tags only if both Sanka
+  // catalogs are unreachable.
+  const perCatalog = await Promise.all(
+    ["sanka-komikindo", "sanka-komikcast"].map(async (catalog) => {
+      for (const t of CATALOG_TRANSPORTS.get(catalog) || []) {
+        if (isDown(t)) continue;
+        try {
+          return await t.genres();
+        } catch {
+          markDown(t);
         }
       }
-      anySanka = true;
-    } catch {
-      markDown(p);
+      return null;
+    }),
+  );
+  const merged = new Map<string, Genre>();
+  let anySanka = false;
+  for (const genres of perCatalog) {
+    if (!genres) continue;
+    anySanka = true;
+    for (const g of genres) {
+      const prev = merged.get(g.slug);
+      // Prefer the properly-capitalized display name when instances
+      // disagree ("Apocalypse" over "apocalypse").
+      if (!prev || (prev.title === prev.title.toLowerCase() && g.title !== g.title.toLowerCase())) {
+        merged.set(g.slug, g);
+      }
     }
   }
   if (anySanka) return [...merged.values()].sort((a, b) => a.title.localeCompare(b.title));
   return mangadex.genres();
 }
 
-// Detail/chapter routing: the namespaced id names the owning provider —
-// content is never fetched from a different provider than the one that
-// listed it. Unprefixed ids are pre-refactor bookmarks; guess Sanka
-// (KomikCast first, then KomikIndo) since those catalogs use slugs.
+// Detail/chapter routing: the namespaced id names the owning CATALOG —
+// content is never fetched from a different catalog than the one that
+// listed it, but the catalog's own transports (edge proxy, then direct)
+// are tried in order. Unprefixed ids are pre-refactor bookmarks; guess
+// Sanka (KomikIndo first — it's the faster instance — then KomikCast)
+// since those catalogs use slugs.
+async function routeToCatalog<T>(catalog: string, fn: (p: Provider) => Promise<T>): Promise<T> {
+  let lastError: unknown = null;
+  for (const t of CATALOG_TRANSPORTS.get(catalog) || []) {
+    try {
+      return await fn(t);
+    } catch (err) {
+      markDown(t);
+      lastError = err;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(`Provider unavailable: ${catalog}`);
+}
+
 export async function fetchComicWithChapters(
   mangaId: string,
 ): Promise<{ comic: Comic; chapters: ChapterEntry[] }> {
   const parsed = splitNs(mangaId);
-  const owner = parsed ? PROVIDER_BY_NAME.get(parsed.provider) : undefined;
-  if (parsed && owner) return owner.comicWithChapters(parsed.raw);
+  if (parsed && CATALOG_TRANSPORTS.has(parsed.catalog)) {
+    return routeToCatalog(parsed.catalog, (t) => t.comicWithChapters(parsed.raw));
+  }
   const raw = parsed ? parsed.raw : mangaId;
   let lastError: unknown = null;
-  for (const p of [sankaKomikcast, sankaKomikindo]) {
+  for (const catalog of ["sanka-komikindo", "sanka-komikcast"]) {
     try {
-      return await p.comicWithChapters(raw);
+      return await routeToCatalog(catalog, (t) => t.comicWithChapters(raw));
     } catch (err) {
       lastError = err;
     }
@@ -757,20 +915,34 @@ export async function fetchChapterPages(mangaId: string, chapterId: string): Pro
   // id's prefix, then to the legacy slug guess.
   for (const id of [chapterId, mangaId]) {
     const parsed = splitNs(id);
-    const owner = parsed ? PROVIDER_BY_NAME.get(parsed.provider) : undefined;
-    if (parsed && owner) {
-      return owner.chapterPages(splitNs(mangaId)?.raw ?? mangaId, parsed.raw);
+    if (parsed && CATALOG_TRANSPORTS.has(parsed.catalog)) {
+      return routeToCatalog(parsed.catalog, (t) =>
+        t.chapterPages(splitNs(mangaId)?.raw ?? mangaId, splitNs(chapterId)?.raw ?? chapterId),
+      );
     }
   }
   const rawChapter = splitNs(chapterId)?.raw ?? chapterId;
   const rawComic = splitNs(mangaId)?.raw ?? mangaId;
   let lastError: unknown = null;
-  for (const p of [sankaKomikcast, sankaKomikindo]) {
+  for (const catalog of ["sanka-komikindo", "sanka-komikcast"]) {
     try {
-      return await p.chapterPages(rawComic, rawChapter);
+      return await routeToCatalog(catalog, (t) => t.chapterPages(rawComic, rawChapter));
     } catch (err) {
       lastError = err;
     }
   }
   throw lastError instanceof Error ? lastError : new Error(`Chapter not found: ${chapterId}`);
+}
+
+// Fire-and-forget detail warm-up, called from card hover/press handlers
+// in app.ts: by the time the tap actually opens the comic, its detail
+// response is usually already in the session cache (see getJson), so
+// the detail page renders immediately instead of waiting on the origin.
+const prefetchStarted = new Set<string>();
+export function prefetchComic(id: string): void {
+  if (!id || prefetchStarted.has(id)) return;
+  prefetchStarted.add(id);
+  fetchComicWithChapters(id).catch(() => {
+    prefetchStarted.delete(id); // a failed warm-up may be retried later
+  });
 }
